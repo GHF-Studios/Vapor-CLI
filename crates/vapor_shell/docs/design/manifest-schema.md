@@ -54,7 +54,7 @@ schema = 1
 name = "vapor-root"
 organization = "ghf-studios"
 version = "0.5.0"
-repository = "https://github.com/GHF-Studios/Vapor-Root"
+repository = "https://github.com/GHF-Studios/Vapor-Client"
 
 [root.steam]
 app-id = 2122620

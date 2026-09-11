@@ -2,7 +2,7 @@
 //!
 //! This module writes only files under the opened IDE project directory's
 //! `.idea` directory. In a SuperWorkspace checkout container that means the
-//! SuperWorkspace root, not an individual source member such as `Vapor-Root`.
+//! SuperWorkspace root, not an individual source member such as `Vapor Client`.
 //! It does not edit global JetBrains settings because those files mix durable
 //! preferences with volatile window, workspace, and AI session state.
 

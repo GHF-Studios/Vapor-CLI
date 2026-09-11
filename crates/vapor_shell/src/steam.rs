@@ -286,7 +286,7 @@ fn read_template(root: &Path, name: &str) -> Result<String, String> {
     let path = root.join(name);
     fs::read_to_string(&path).map_err(|error| {
         format!(
-            "failed to read SteamPipe template '{}': {error}\nhelp: keep Vapor-Root SteamPipe templates checked in under {STEAMPIPE_TEMPLATE_ROOT}",
+            "failed to read SteamPipe template '{}': {error}\nhelp: keep Vapor Client SteamPipe templates checked in under {STEAMPIPE_TEMPLATE_ROOT}",
             path.display()
         )
     })
