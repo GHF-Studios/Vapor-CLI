@@ -20,6 +20,7 @@ use crate::{
     workflow::{self, CargoWorkflow, ProjectSelection},
     workspace::{SourceRootKind, WorkspaceManifest},
 };
+use vapor_core::{LocalClientDeploymentOutcome, deploy_client_locally};
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::Deserialize;
 use std::{
@@ -42,6 +43,13 @@ pub enum ShellCommand {
         /// Launch target.
         #[command(subcommand)]
         command: LaunchCommand,
+    },
+
+    /// Build and locally deploy the Vapor Client workspace from source.
+    Client {
+        /// Client operation.
+        #[command(subcommand)]
+        command: ClientCommand,
     },
 
     /// Open, index, inspect, sync, or repair authored source roots.
@@ -174,6 +182,24 @@ pub enum LaunchCommand {
     },
     /// Launch the currently selected installed packagepack composition.
     Selected,
+}
+
+#[derive(Debug, Subcommand)]
+/// Vapor Client deployment operations.
+pub enum ClientCommand {
+    /// Deploy the active Vapor Client workspace.
+    Deploy {
+        /// Deployment target.
+        #[command(subcommand)]
+        command: ClientDeployCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+/// Local Vapor Client deployment targets.
+pub enum ClientDeployCommand {
+    /// Build and promote the source-authoritative local Vapor App Instance.
+    Local,
 }
 
 /// Private-test diagnostics operations.
@@ -620,6 +646,7 @@ pub enum Control {
 pub fn execute(command: ShellCommand, state: &mut ShellState) -> Result<Control, String> {
     match command {
         ShellCommand::Launch { command } => execute_launch(command, state)?,
+        ShellCommand::Client { command } => execute_client(command)?,
         ShellCommand::Source { command } => execute_source(command, state)?,
         ShellCommand::Installation => {
             println!("{}", state.installation().root().display());
@@ -665,6 +692,41 @@ pub fn execute(command: ShellCommand, state: &mut ShellState) -> Result<Control,
     }
 
     Ok(Control::Continue)
+}
+
+pub(super) fn execute_client(command: ClientCommand) -> Result<(), String> {
+    match command {
+        ClientCommand::Deploy {
+            command: ClientDeployCommand::Local,
+        } => match deploy_client_locally().map_err(|error| error.to_string())? {
+            LocalClientDeploymentOutcome::AuthorityDelegated {
+                executable,
+                installation_root,
+            } => {
+                println!("Transferring local deployment authority to source-built CLI:");
+                println!("  executable: {}", executable.display());
+                println!("  installation: {}", installation_root.display());
+            }
+            LocalClientDeploymentOutcome::Deployed {
+                report,
+                source_bootstrap,
+                synchronization_warning,
+            } => {
+                println!("Vapor Installation: {}", report.installation_root.display());
+                println!("Deployed binaries:");
+                for binary in &report.binaries {
+                    println!("  {} -> {}", binary.name, binary.destination.display());
+                }
+                println!("Launch wrapper: {}", report.launch_script.display());
+                println!("Shell activation: {}", report.activation_script.display());
+                println!("Source bootstrap: {}", source_bootstrap.display());
+                if let Some(error) = synchronization_warning {
+                    eprintln!("warning: local Client deployment succeeded, but the existing development environment could not be synchronized: {error}");
+                }
+            }
+        },
+    }
+    Ok(())
 }
 
 fn execute_launch(command: LaunchCommand, state: &ShellState) -> Result<(), String> {

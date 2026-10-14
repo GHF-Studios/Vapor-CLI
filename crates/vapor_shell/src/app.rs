@@ -3,8 +3,8 @@
 use crate::{
     app_local_tools,
     command::{
-        self, ContentCommand, Control, DiagnosticsCommand, LaunchCommand, ProviderCommand,
-        RootCommand, ScriptCommand, ShellCommand, SourceCommand,
+        self, ClientCommand, ContentCommand, Control, DiagnosticsCommand, LaunchCommand,
+        ProviderCommand, RootCommand, ScriptCommand, ShellCommand, SourceCommand,
     },
     diagnostics::{self, CaptureOptions},
     discovery::EnvironmentPaths,
@@ -42,7 +42,12 @@ pub fn run() -> Result<(), String> {
     }
 
     diagnostics::init_from_current_exe(startup.diagnostics);
-    let result = run_inner(startup.mode);
+    let result = match startup.mode {
+        StartupMode::Direct(ShellCommand::Client { command }) => {
+            command::execute_client(command)
+        }
+        mode => run_inner(mode),
+    };
     if let Err(error) = &result {
         diagnostics::event(format!("run error: {error}"));
     }
@@ -299,6 +304,11 @@ enum HostSubcommand {
         #[command(subcommand)]
         command: LaunchCommand,
     },
+    /// Build and locally deploy the Vapor Client workspace from source.
+    Client {
+        #[command(subcommand)]
+        command: ClientCommand,
+    },
     /// Manage authored source roots.
     Source {
         #[command(subcommand)]
@@ -382,6 +392,7 @@ impl HostSubcommand {
     fn into_shell_command(self) -> ShellCommand {
         match self {
             HostSubcommand::Launch { command } => ShellCommand::Launch { command },
+            HostSubcommand::Client { command } => ShellCommand::Client { command },
             HostSubcommand::Source { command } => ShellCommand::Source { command },
             HostSubcommand::Installation => ShellCommand::Installation,
             HostSubcommand::Binaries => ShellCommand::Binaries,
