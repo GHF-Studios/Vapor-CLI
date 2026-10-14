@@ -30,9 +30,12 @@ not define separate product models.
 
 Current target shape:
 
-- **Steam Play** is an opinionated app-mode route into the default playable
-  composition.
-- **Steam Shell** opens the versatile interactive Vapor control face.
+- **Steam Vapor Studio** is the default GUI for selecting, composing, editing,
+  deploying, and publishing content.
+- **Steam Play** opens Studio and runs the selected composition.
+- **Steam Shell** opens the versatile interactive Vapor control face for
+  recovery and command-line work.
+- **Steam Installer** opens the app install/repair interface directly.
 - **Vapor Shell** can inspect, initiate, and route setup, maintenance,
   development, publish, source, content, and app operations.
 - **RustRover** is an editor/controller for a SuperWorkspace. Its generated
@@ -41,9 +44,10 @@ Current target shape:
 - **Direct terminal invocation** is valid when a developer or support person
   deliberately enters the app-root control surface.
 
-Steam should expose only app entry styles such as Play and Shell. Maintenance,
-setup, and developer work are initiated/configured from Shell, RustRover, or
-terminal surfaces; they are not separate Steam launch-option matrix entries.
+Steam exposes these four stable app entry styles: Studio (default), Play,
+Shell, and Installer. Other maintenance and developer operations are initiated
+from Studio, Shell, RustRover, or terminal surfaces rather than gaining their
+own launch-option entries.
 
 ## Precompiled control-plane boundary
 
@@ -51,7 +55,7 @@ Core Vapor control-plane functionality must not depend on the providers it
 manages. The installed app must include enough precompiled code to:
 
 - inspect and explain app-root state;
-- launch Play and Shell;
+- launch Studio, Play, Shell, and Installer;
 - run setup and maintenance;
 - install, remove, downgrade, and repair development providers;
 - clean app-owned generated state;
@@ -236,7 +240,7 @@ surfaces:
 - keep Rust scripts only where they are dev-only or materially safer than shell;
 - generate RustRover actions from the app-root/SuperWorkspace model and launch
   external Vapor terminals for most substantial operations;
-- keep Steam launch options minimal: Play and Shell;
+- keep Steam launch options to Studio (default), Play, Shell, and Installer;
 - treat SteamCMD player acquisition as temporary provider plumbing, not product
   language;
 - remove "publish preview" as a named workflow in favor of `publish --dry-run`;

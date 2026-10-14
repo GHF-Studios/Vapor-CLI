@@ -138,9 +138,15 @@ pub fn smoke(stage: &distribution::StageReport, options: &StageOptions) -> Resul
         match kind {
             SteamDepotKind::Common => {}
             SteamDepotKind::Linux => {
+                let launch_script = depot.root().join("bin/vapor-launch.sh");
                 require_file(
-                    depot.root().join("bin/vapor-launch.sh"),
+                    launch_script.clone(),
                     "staged Linux depot has no launch script",
+                )?;
+                require_script_target(
+                    &launch_script,
+                    &format!("target=\"{target}\""),
+                    "staged Linux launch script selects the wrong runtime target",
                 )?;
                 require_file(
                     depot
@@ -162,11 +168,25 @@ pub fn smoke(stage: &distribution::StageReport, options: &StageOptions) -> Resul
                         .join("vapor-installer"),
                     "staged Linux depot has no target Vapor Installer binary",
                 )?;
+                require_file(
+                    depot.root().join("bin").join(target).join("vapor-studio"),
+                    "staged Linux depot has no target Vapor Studio binary",
+                )?;
+                require_file(
+                    depot.root().join("bin").join(target).join("vapor-ide-host"),
+                    "staged Linux depot has no target Vapor IDE host binary",
+                )?;
             }
             SteamDepotKind::Windows => {
+                let launch_script = depot.root().join("bin/vapor-launch.cmd");
                 require_file(
-                    depot.root().join("bin/vapor-launch.cmd"),
+                    launch_script.clone(),
                     "staged Windows depot has no launch script",
+                )?;
+                require_script_target(
+                    &launch_script,
+                    &format!("set \"TARGET={target}\""),
+                    "staged Windows launch script selects the wrong runtime target",
                 )?;
                 require_file(
                     depot
@@ -189,6 +209,22 @@ pub fn smoke(stage: &distribution::StageReport, options: &StageOptions) -> Resul
                     "staged Windows depot has no target Vapor Installer binary",
                 )?;
                 require_file(
+                    depot
+                        .root()
+                        .join("bin")
+                        .join(target)
+                        .join("vapor-studio.exe"),
+                    "staged Windows depot has no target Vapor Studio binary",
+                )?;
+                require_file(
+                    depot
+                        .root()
+                        .join("bin")
+                        .join(target)
+                        .join("vapor-ide-host.exe"),
+                    "staged Windows depot has no target Vapor IDE host binary",
+                )?;
+                require_file(
                     depot.root().join("bin").join(target).join("libunwind.dll"),
                     "staged Windows depot has no GNU runtime DLL",
                 )?;
@@ -200,6 +236,17 @@ pub fn smoke(stage: &distribution::StageReport, options: &StageOptions) -> Resul
 
 fn require_file(path: PathBuf, message: &str) -> Result<(), String> {
     if path.is_file() {
+        Ok(())
+    } else {
+        Err(format!("{message}: {}", path.display()))
+    }
+}
+
+fn require_script_target(path: &Path, expected_line: &str, message: &str) -> Result<(), String> {
+    let script = fs::read_to_string(path).map_err(|error| {
+        format!("failed to read staged launch script '{}': {error}", path.display())
+    })?;
+    if script.lines().any(|line| line.trim() == expected_line) {
         Ok(())
     } else {
         Err(format!("{message}: {}", path.display()))

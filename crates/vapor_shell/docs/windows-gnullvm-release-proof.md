@@ -1,10 +1,10 @@
 # Windows GNU/LLVM release proof
 
 This checklist proves the Windows side of the release target matrix without
-publishing Steam depot or Workshop changes. It starts from the product path:
-Steam opens a visible Vapor Shell through the native entrypoint, and the launch
-script runs the script-owned player-mode install through the `vapor-installer`
-shim before Shell starts.
+publishing Steam depot or Workshop changes. Steam's default launch opens Vapor
+Studio through the native entrypoint. Shell and Installer remain separate
+terminal recovery options; the Shell launch script runs the script-owned
+player-mode install through the `vapor-installer` shim before Shell starts.
 
 The target is:
 
@@ -14,16 +14,24 @@ x86_64-pc-windows-gnullvm
 
 ## Steam launch
 
-The Windows Steam launch option should target the native entrypoint shipped in
-the target-specific depot:
+The Windows Vapor Studio launch option should be the Steam default and target
+the native entrypoint shipped in the target-specific depot:
+
+```text
+executable: bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe
+arguments:  studio
+```
+
+The separate Play option uses the same executable with `play`; it opens Studio
+in direct-play mode. Shell and Installer are recovery options:
 
 ```text
 executable: bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe
 arguments:  shell
 ```
 
-Clicking that launch option should open a persistent `cmd` window running Vapor
-Shell. The user should not need to install Git before clicking Play.
+Clicking Shell should open a persistent `cmd` window running Vapor Shell. The
+user should not need to install Git before clicking Shell.
 
 The installer should also be exposed as its own launch option:
 
@@ -32,7 +40,7 @@ executable: bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe
 arguments:  installer
 ```
 
-Clicking that launch option should open a persistent `cmd` window running
+Clicking Installer should open a persistent `cmd` window running
 `vapor-installer` directly. It should not run the quiet player-mode install
 before showing the installer/status surface.
 
@@ -167,9 +175,16 @@ Expected app staging shape:
 output/root/content/linux/bin/vapor-launch.sh
 output/root/content/linux/bin/x86_64-unknown-linux-gnu/vapor
 output/root/content/linux/bin/x86_64-unknown-linux-gnu/vapor-entrypoint
+output/root/content/linux/bin/x86_64-unknown-linux-gnu/vapor-installer
+output/root/content/linux/bin/x86_64-unknown-linux-gnu/vapor-studio
+output/root/content/linux/bin/x86_64-unknown-linux-gnu/vapor-ide-host
 output/root/content/windows/bin/vapor-launch.cmd
 output/root/content/windows/bin/x86_64-pc-windows-gnullvm/vapor.exe
 output/root/content/windows/bin/x86_64-pc-windows-gnullvm/vapor-entrypoint.exe
+output/root/content/windows/bin/x86_64-pc-windows-gnullvm/vapor-installer.exe
+output/root/content/windows/bin/x86_64-pc-windows-gnullvm/vapor-studio.exe
+output/root/content/windows/bin/x86_64-pc-windows-gnullvm/vapor-ide-host.exe
+output/root/content/windows/bin/x86_64-pc-windows-gnullvm/libunwind.dll
 ```
 
 Then prove the Loo-Cast Workshop package preview:

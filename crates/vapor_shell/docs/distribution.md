@@ -80,11 +80,13 @@ payload is split by the manifest-declared Steam depot includes:
   `resources/vapor/vapor-scripts/` when runtime startup scripts are present, and
   `examples/vapor-examples/` when the root source includes official examples.
 - `linux/` contains Linux runtime files: selected Linux `bin/<target>/`
-  application binaries including `vapor-entrypoint`, plus
+  application binaries including `vapor`, `vapor-entrypoint`,
+  `vapor-installer`, `vapor-studio`, and `vapor-ide-host`, plus
   `bin/vapor-launch.sh`.
 - `windows/` contains Windows runtime files: selected Windows `bin/<target>/`
-  application binaries including `vapor-entrypoint.exe`, required Windows
-  runtime DLLs, plus `bin/vapor-launch.cmd`.
+  application binaries including `vapor.exe`, `vapor-entrypoint.exe`,
+  `vapor-installer.exe`, `vapor-studio.exe`, and `vapor-ide-host.exe`, required
+  Windows runtime DLLs, plus `bin/vapor-launch.cmd`.
 
 Source repositories, Cargo build targets, Cargo registries, Git checkouts,
 Steam authentication, installer logs, generated app-root state, and SteamPipe
@@ -123,22 +125,33 @@ target-specific app binaries into `bin/<target>/`, then use
 `root publish --skip-build --dry-run` only as a preview that confirms the
 imported files stage correctly.
 
-Steam-facing native entrypoints are the minimal terminal adapter split. They
-open the platform terminal, start the matching launch script with the internal
-`--hold` wrapper flag, forward Steam launch arguments after that flag, and wait
-for the terminal to close:
+Steam's default launch target is Studio and starts the sibling GUI directly.
+Play also opens Studio, with `--play` to run the selected composition. Shell
+and Installer are separate terminal recovery options:
 
 ```text
+bin/x86_64-unknown-linux-gnu/vapor-entrypoint studio
+  -> bin/x86_64-unknown-linux-gnu/vapor-studio
+
 bin/x86_64-unknown-linux-gnu/vapor-entrypoint play
-  -> Konsole -> bin/vapor-launch.sh --hold play
+  -> bin/x86_64-unknown-linux-gnu/vapor-studio --play
+
+bin/x86_64-unknown-linux-gnu/vapor-entrypoint shell
+  -> Konsole -> bin/vapor-launch.sh --hold shell
   -> bin/x86_64-unknown-linux-gnu/vapor
 
 bin/x86_64-unknown-linux-gnu/vapor-entrypoint installer
   -> Konsole -> bin/vapor-launch.sh --hold installer
   -> bin/x86_64-unknown-linux-gnu/vapor-installer
 
+bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe studio
+  -> bin\x86_64-pc-windows-gnullvm\vapor-studio.exe
+
 bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe play
-  -> cmd /C -> bin\vapor-launch.cmd --hold play
+  -> bin\x86_64-pc-windows-gnullvm\vapor-studio.exe --play
+
+bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe shell
+  -> cmd /C -> bin\vapor-launch.cmd --hold shell
   -> bin\x86_64-pc-windows-gnullvm\vapor.exe
   -> cmd /K after Vapor exits
 
@@ -149,7 +162,7 @@ bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe installer
 ```
 
 The launch scripts run the shipped `vapor-installer install` shim first for
-Play/Shell launch targets. The shim delegates to the script-owned setup layer,
+Shell launch targets. The shim delegates to the script-owned setup layer,
 then the launch script selects the installed platform binary and command. The
 Installer launch target opens `vapor-installer` directly and skips headless
 install. Bootstrap failure is recorded as

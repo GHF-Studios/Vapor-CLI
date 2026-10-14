@@ -93,28 +93,32 @@ Branches remain build channels. Keep `vapor-dev` as the development beta branch
 for uploaded test builds. Add more branches only when there is a concrete build
 promotion need, such as a stable alpha branch distinct from internal dev.
 
-After a depot build that includes `bin/<target>/vapor-entrypoint[.exe]` and the
-matching `bin/vapor-launch.*` script, Steam launch options should target the
-native entrypoint. The entrypoint opens the platform terminal, starts the launch
-script with the internal `--hold` wrapper flag, forwards Steam's launch
-arguments after that flag, and waits until the terminal closes. For Play/Shell
-launch targets, the script runs the shipped `vapor-installer install` shim
-first. The shim delegates to the app-root
-`resources/vapor/tools/production/app_setup/setup_player.rs` tool, then the
-launch script hands off to the installed Vapor binary:
+The depot must include `vapor-entrypoint[.exe]`, `vapor-studio[.exe]`,
+`vapor-installer[.exe]`, and `vapor-ide-host[.exe]` under `bin/<target>`;
+the Vapor Shell binary is also required for the Shell recovery option. Steam's
+default launch option is **Vapor Studio** and
+must invoke the native entrypoint with the `studio` argument. The entrypoint
+starts the sibling Studio binary directly; this is a GUI path and does not open
+a terminal. Keep recovery options separate:
 
+- **Linux Vapor Studio (default)**: executable
+  `bin/x86_64-unknown-linux-gnu/vapor-entrypoint`,
+  arguments `studio`.
 - **Linux Play**: executable
   `bin/x86_64-unknown-linux-gnu/vapor-entrypoint`,
-  arguments `play`.
+  arguments `play` (Studio launches the selected profile composition).
 - **Linux Vapor Shell**: executable
   `bin/x86_64-unknown-linux-gnu/vapor-entrypoint`,
   arguments `shell`.
 - **Linux Vapor Installer**: executable
   `bin/x86_64-unknown-linux-gnu/vapor-entrypoint`,
   arguments `installer`.
+- **Windows Vapor Studio (default)**: executable
+  `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe`,
+  arguments `studio`.
 - **Windows Play**: executable
   `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe`,
-  arguments `play`.
+  arguments `play` (Studio launches the selected profile composition).
 - **Windows Vapor Shell**: executable
   `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe`,
   arguments `shell`.
@@ -122,14 +126,11 @@ launch script hands off to the installed Vapor binary:
   `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe`,
   arguments `installer`.
 
-The Linux entrypoint opens Konsole. The Windows entrypoint opens `cmd` long
-enough to run the launch script, and the launch script owns the persistent
-interactive command prompt after Vapor exits. Both entrypoints are intentionally
-thin terminal adapters; they do not interpret `play`, `shell`, `installer`, or
-future launch arguments beyond inserting the internal wrapper hold flag. The
-launch scripts own launch-target dispatch and the visible wrapper banner, the
-setup scripts own installation mechanics, `vapor-installer` is only a
-compatibility entrypoint, and Vapor Shell owns product interaction.
+The Linux and Windows entrypoints launch Studio for both `studio` and `play`;
+`play` adds Studio's `--play` mode, which builds and runs the selected profile
+composition. `shell` and `installer` continue through the terminal wrapper. Set
+the Steam default launch option to Studio, not Play, so users arrive at the GUI
+without automatically launching a composition.
 Launch-time bootstrap failure is recorded under
 `<app-root>/.vapor/state/installer/bootstrap-failure.txt`; Shell reads that
 app-local state instead of inheriting wrapper environment variables. Running
@@ -158,16 +159,16 @@ failure and the exact setup command. For ordinary testers, reinstalling the Stea
 preferred recovery because the app root is disposable and should not hold
 authoritative user data.
 
-The `play` launch target opens the normal interactive Vapor Shell, runs the
-installed `resources/vapor/vapor-scripts/default.vapor` script, and leaves the
-shell open. That script calls `launch default`.
+The Steam **Play** launch target opens Vapor Studio with `--play`, which loads
+the selected profile and attempts to run its composition. If no usable profile
+selection exists, Studio remains open and explains what needs attention.
 
-`launch default` resolves the app manifest's default packagepack seed, installs
-that packagepack and its dependency closure when missing, reads the selected
-packagepack's declared dependency roles, resolves the required `engine`
-dependency by content ID, records any declared `game` dependency by content ID,
-and hands off to the resolved engine artifact's binary for the host runtime
-target.
+From Vapor Shell, `launch default` remains available as a CLI operation. It
+resolves the app manifest's default packagepack seed, installs that packagepack
+and its dependency closure when missing, reads the selected packagepack's
+declared dependency roles, resolves the required `engine` dependency by content
+ID, records any declared `game` dependency by content ID, and hands off to the
+resolved engine artifact's binary for the host runtime target.
 
 Workshop downloads use anonymous SteamCMD by default. `--account ACCOUNT` exists
 for deliberately private app/content testing, not normal Play.
