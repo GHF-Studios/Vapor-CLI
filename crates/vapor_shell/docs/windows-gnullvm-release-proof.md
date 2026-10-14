@@ -176,13 +176,13 @@ output/root/content/linux/bin/vapor-launch.sh
 output/root/content/linux/bin/x86_64-unknown-linux-gnu/vapor
 output/root/content/linux/bin/x86_64-unknown-linux-gnu/vapor-entrypoint
 output/root/content/linux/bin/x86_64-unknown-linux-gnu/vapor-installer
-output/root/content/linux/bin/x86_64-unknown-linux-gnu/vapor-studio
+output/root/content/linux/bin/x86_64-unknown-linux-gnu/vapor-gui
 output/root/content/linux/bin/x86_64-unknown-linux-gnu/vapor-ide-host
 output/root/content/windows/bin/vapor-launch.cmd
 output/root/content/windows/bin/x86_64-pc-windows-gnullvm/vapor.exe
 output/root/content/windows/bin/x86_64-pc-windows-gnullvm/vapor-entrypoint.exe
 output/root/content/windows/bin/x86_64-pc-windows-gnullvm/vapor-installer.exe
-output/root/content/windows/bin/x86_64-pc-windows-gnullvm/vapor-studio.exe
+output/root/content/windows/bin/x86_64-pc-windows-gnullvm/vapor-gui.exe
 output/root/content/windows/bin/x86_64-pc-windows-gnullvm/vapor-ide-host.exe
 output/root/content/windows/bin/x86_64-pc-windows-gnullvm/libunwind.dll
 ```

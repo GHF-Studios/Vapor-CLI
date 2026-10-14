@@ -356,7 +356,7 @@ runs validation/build/promotion before staging. Narrow target selection,
 they are rejected for real uploads. The depot smoke check rejects staged
 platform depots when their matching `bin/vapor-launch.*` script,
 `bin/<target>/vapor-entrypoint[.exe]`, `bin/<target>/vapor[.exe]`,
-`bin/<target>/vapor-installer[.exe]`, `bin/<target>/vapor-studio[.exe]`,
+`bin/<target>/vapor-installer[.exe]`, `bin/<target>/vapor-gui[.exe]`,
 `bin/<target>/vapor-ide-host[.exe]`, or required Windows runtime DLL payload
 is missing. Launchable binaries are declared by each direct root workspace's
 `[workspace].binaries` list and promoted into the app root before staging.

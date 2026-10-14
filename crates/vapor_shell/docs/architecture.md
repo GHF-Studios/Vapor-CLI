@@ -35,7 +35,7 @@ Vapor accepts two source-root kinds:
   directory as its `Cargo.toml`.
 
 Content manifests cannot be standalone source roots. Starting inside
-Vapor-Shell, a game, an engine, or another nested artifact escalates to the
+Vapor-CLI, a game, an engine, or another nested artifact escalates to the
 highest containing `[root]` or `[workspace]`.
 
 The Steam installation is the app root, not a source root. It is discovered from

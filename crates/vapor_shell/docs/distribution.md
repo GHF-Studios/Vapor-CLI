@@ -81,11 +81,11 @@ payload is split by the manifest-declared Steam depot includes:
   `examples/vapor-examples/` when the root source includes official examples.
 - `linux/` contains Linux runtime files: selected Linux `bin/<target>/`
   application binaries including `vapor`, `vapor-entrypoint`,
-  `vapor-installer`, `vapor-studio`, and `vapor-ide-host`, plus
+  `vapor-installer`, `vapor-gui`, and `vapor-ide-host`, plus
   `bin/vapor-launch.sh`.
 - `windows/` contains Windows runtime files: selected Windows `bin/<target>/`
   application binaries including `vapor.exe`, `vapor-entrypoint.exe`,
-  `vapor-installer.exe`, `vapor-studio.exe`, and `vapor-ide-host.exe`, required
+  `vapor-installer.exe`, `vapor-gui.exe`, and `vapor-ide-host.exe`, required
   Windows runtime DLLs, plus `bin/vapor-launch.cmd`.
 
 Source repositories, Cargo build targets, Cargo registries, Git checkouts,
@@ -126,29 +126,31 @@ target-specific app binaries into `bin/<target>/`, then use
 imported files stage correctly.
 
 Steam's default launch target is Studio and starts the sibling GUI directly.
-Play also opens Studio, with `--play` to run the selected composition. Shell
-and Installer are separate terminal recovery options:
+Play starts the same GUI in direct-play mode. Installer opens its GUI product
+when available and falls back to the precompiled installer. Shell stays a
+terminal recovery option:
 
 ```text
 bin/x86_64-unknown-linux-gnu/vapor-entrypoint studio
-  -> bin/x86_64-unknown-linux-gnu/vapor-studio
+  -> bin/x86_64-unknown-linux-gnu/vapor-gui --mode studio
 
 bin/x86_64-unknown-linux-gnu/vapor-entrypoint play
-  -> bin/x86_64-unknown-linux-gnu/vapor-studio --play
+  -> bin/x86_64-unknown-linux-gnu/vapor-gui --mode play
 
 bin/x86_64-unknown-linux-gnu/vapor-entrypoint shell
   -> Konsole -> bin/vapor-launch.sh --hold shell
   -> bin/x86_64-unknown-linux-gnu/vapor
 
 bin/x86_64-unknown-linux-gnu/vapor-entrypoint installer
-  -> Konsole -> bin/vapor-launch.sh --hold installer
+  -> bin/x86_64-unknown-linux-gnu/vapor-gui --mode installer
+  -> if GUI is absent: Konsole -> bin/vapor-launch.sh --hold installer
   -> bin/x86_64-unknown-linux-gnu/vapor-installer
 
 bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe studio
-  -> bin\x86_64-pc-windows-gnullvm\vapor-studio.exe
+  -> bin\x86_64-pc-windows-gnullvm\vapor-gui.exe --mode studio
 
 bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe play
-  -> bin\x86_64-pc-windows-gnullvm\vapor-studio.exe --play
+  -> bin\x86_64-pc-windows-gnullvm\vapor-gui.exe --mode play
 
 bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe shell
   -> cmd /C -> bin\vapor-launch.cmd --hold shell
@@ -156,7 +158,8 @@ bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe shell
   -> cmd /K after Vapor exits
 
 bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe installer
-  -> cmd /C -> bin\vapor-launch.cmd --hold installer
+  -> bin\x86_64-pc-windows-gnullvm\vapor-gui.exe --mode installer
+  -> if GUI is absent: cmd /C -> bin\vapor-launch.cmd --hold installer
   -> bin\x86_64-pc-windows-gnullvm\vapor-installer.exe
   -> cmd /K after Vapor Installer exits
 ```

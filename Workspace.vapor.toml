@@ -1,10 +1,10 @@
 schema = 1
 
 [workspace]
-name = "vapor-shell"
+name = "vapor-cli"
 organization = "ghf-studios"
 version = "0.5.0"
-repository = "https://github.com/GHF-Studios/Vapor-Shell"
+repository = "https://github.com/GHF-Studios/Vapor-CLI"
 binaries = ["vapor"]
 
 [toolchain]

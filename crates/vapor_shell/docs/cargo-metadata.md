@@ -13,7 +13,7 @@ normal workspace/
 app root/
 ├── App-Source.vapor.toml    # [root]
 ├── .gitmodules
-└── Vapor-Shell/
+└── Vapor-CLI/
     ├── Workspace.vapor.toml    # [workspace]
     └── Cargo.toml
 ```

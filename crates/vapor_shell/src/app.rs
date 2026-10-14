@@ -16,7 +16,7 @@ use crate::{
 };
 use clap::{Parser, Subcommand, error::ErrorKind};
 use clap_repl::{ClapEditor, ReadCommandOutput};
-use std::path::Path;
+use std::{ffi::OsString, path::Path};
 
 enum StartupMode {
     Repl { startup_script: Option<String> },
@@ -335,6 +335,11 @@ enum HostSubcommand {
         #[command(subcommand)]
         command: ProviderCommand,
     },
+    /// Author workspaces and content, and manage SDK release operations.
+    Sdk {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<OsString>,
+    },
     /// Inspect or ship private-test launch diagnostics.
     Diagnostics {
         #[command(subcommand)]
@@ -386,6 +391,7 @@ impl HostSubcommand {
             HostSubcommand::Root { command } => ShellCommand::Root { command },
             HostSubcommand::Script { command } => ShellCommand::Script { command },
             HostSubcommand::Provider { command } => ShellCommand::Provider { command },
+            HostSubcommand::Sdk { args } => ShellCommand::Sdk { args },
             HostSubcommand::Diagnostics { command } => ShellCommand::Diagnostics { command },
         }
     }

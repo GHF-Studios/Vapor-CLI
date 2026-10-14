@@ -78,7 +78,7 @@ required = true
 ```
 
 The project root has the full include list, including docs, launch scripts, and
-examples. `vapor-entrypoint[.exe]` is a promoted Vapor-Entrypoint binary and
+examples. `vapor-entrypoint[.exe]` is a promoted Vapor-Steam-Entrypoint binary and
 belongs in the promoted/imported `bin/<target>/` directory before depot
 staging. Windows runtime DLLs belong in the promoted/imported
 `bin/<windows-target>/` directory before depot staging.
@@ -93,13 +93,14 @@ Branches remain build channels. Keep `vapor-dev` as the development beta branch
 for uploaded test builds. Add more branches only when there is a concrete build
 promotion need, such as a stable alpha branch distinct from internal dev.
 
-The depot must include `vapor-entrypoint[.exe]`, `vapor-studio[.exe]`,
+The depot must include `vapor-entrypoint[.exe]`, `vapor-gui[.exe]`,
 `vapor-installer[.exe]`, and `vapor-ide-host[.exe]` under `bin/<target>`;
 the Vapor Shell binary is also required for the Shell recovery option. Steam's
-default launch option is **Vapor Studio** and
-must invoke the native entrypoint with the `studio` argument. The entrypoint
-starts the sibling Studio binary directly; this is a GUI path and does not open
-a terminal. Keep recovery options separate:
+default launch option is **Vapor Studio** and must invoke the native entrypoint
+with the `studio` argument. The entrypoint starts the sibling Vapor-GUI binary
+with the selected mode; this is a GUI path and does not open a terminal.
+Installer falls back to the precompiled bootstrap if Vapor-GUI is missing.
+Keep the Shell recovery option separate:
 
 - **Linux Vapor Studio (default)**: executable
   `bin/x86_64-unknown-linux-gnu/vapor-entrypoint`,

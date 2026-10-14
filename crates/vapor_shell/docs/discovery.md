@@ -55,11 +55,11 @@ accepts `[root]` or `[workspace]`. Vapor-Root uses
 `App-Source.vapor.toml`; ordinary workspaces use `Workspace.vapor.toml`.
 
 - `[root]` is the Vapor application source/depot root. It may contain direct
-  Vapor workspace submodules such as Vapor-Shell.
+  Vapor workspace submodules such as Vapor-CLI.
 - `[workspace]` is a normal Vapor/Cargo source workspace rooted in the same
   directory as its `Cargo.toml`.
 
-Starting inside a nested game, engine, mod, pack, or the Vapor-Shell checkout
+Starting inside a nested game, engine, mod, pack, or the Vapor-CLI checkout
 and then opening that path still selects the highest containing source root. A
 standalone content manifest is rejected as a source root.
 

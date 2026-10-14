@@ -144,6 +144,13 @@ pub enum ShellCommand {
         command: ProviderCommand,
     },
 
+    /// Author workspaces and content, and manage SDK release operations.
+    Sdk {
+        /// Arguments accepted by the SDK command surface.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<std::ffi::OsString>,
+    },
+
     /// Inspect or ship private-test launch diagnostics.
     Diagnostics {
         /// Diagnostics operation.
@@ -649,6 +656,10 @@ pub fn execute(command: ShellCommand, state: &mut ShellState) -> Result<Control,
         ShellCommand::Content { command } => execute_content(command, state)?,
         ShellCommand::Script { command } => execute_script_command(command, state)?,
         ShellCommand::Provider { command } => execute_provider(command, state)?,
+        ShellCommand::Sdk { args } => {
+            let arguments = std::iter::once(std::ffi::OsString::from("vapor sdk")).chain(args);
+            vapor_sdk_cli::run(arguments)?;
+        }
         ShellCommand::Diagnostics { command } => execute_diagnostics(command, state)?,
         ShellCommand::Exit => return Ok(Control::Exit),
     }

@@ -1,0 +1,10 @@
+[package]
+name = "vapor_sdk_cli"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+clap = { version = "4.6.1", features = ["derive"] }
+dialoguer = "0.11.0"
+owo-colors = { version = "4.2.2", features = ["supports-colors"] }
+vapor_sdk_core = { path = "../../../Vapor/crates/vapor_sdk_core" }

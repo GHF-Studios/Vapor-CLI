@@ -169,8 +169,8 @@ pub fn smoke(stage: &distribution::StageReport, options: &StageOptions) -> Resul
                     "staged Linux depot has no target Vapor Installer binary",
                 )?;
                 require_file(
-                    depot.root().join("bin").join(target).join("vapor-studio"),
-                    "staged Linux depot has no target Vapor Studio binary",
+                    depot.root().join("bin").join(target).join("vapor-gui"),
+                    "staged Linux depot has no target Vapor GUI binary",
                 )?;
                 require_file(
                     depot.root().join("bin").join(target).join("vapor-ide-host"),
@@ -213,8 +213,8 @@ pub fn smoke(stage: &distribution::StageReport, options: &StageOptions) -> Resul
                         .root()
                         .join("bin")
                         .join(target)
-                        .join("vapor-studio.exe"),
-                    "staged Windows depot has no target Vapor Studio binary",
+                        .join("vapor-gui.exe"),
+                    "staged Windows depot has no target Vapor GUI binary",
                 )?;
                 require_file(
                     depot
