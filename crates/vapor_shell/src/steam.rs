@@ -209,11 +209,7 @@ pub fn smoke(stage: &distribution::StageReport, options: &StageOptions) -> Resul
                     "staged Windows depot has no target Vapor Installer binary",
                 )?;
                 require_file(
-                    depot
-                        .root()
-                        .join("bin")
-                        .join(target)
-                        .join("vapor-gui.exe"),
+                    depot.root().join("bin").join(target).join("vapor-gui.exe"),
                     "staged Windows depot has no target Vapor GUI binary",
                 )?;
                 require_file(
@@ -244,7 +240,10 @@ fn require_file(path: PathBuf, message: &str) -> Result<(), String> {
 
 fn require_script_target(path: &Path, expected_line: &str, message: &str) -> Result<(), String> {
     let script = fs::read_to_string(path).map_err(|error| {
-        format!("failed to read staged launch script '{}': {error}", path.display())
+        format!(
+            "failed to read staged launch script '{}': {error}",
+            path.display()
+        )
     })?;
     if script.lines().any(|line| line.trim() == expected_line) {
         Ok(())

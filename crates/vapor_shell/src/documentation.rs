@@ -17,6 +17,17 @@ pub fn build(paths: &EnvironmentPaths, manifest: &WorkspaceManifest) -> Result<P
         .installation()
         .bundled_cargo()
         .ok_or_else(|| "bundled Cargo is unavailable".to_owned())?;
+    let toolchain_bin = cargo
+        .parent()
+        .ok_or_else(|| format!("bundled Cargo has no parent directory: {}", cargo.display()))?;
+    let rustc = toolchain_bin.join(format!("rustc{}", std::env::consts::EXE_SUFFIX));
+    let rustdoc = toolchain_bin.join(format!("rustdoc{}", std::env::consts::EXE_SUFFIX));
+    if !rustc.is_file() || !rustdoc.is_file() {
+        return Err(format!(
+            "bundled Cargo toolchain is incomplete: expected rustc and rustdoc beside {}",
+            cargo.display()
+        ));
+    }
     let docs_root = paths.installation().root().join("docs");
     ensure_contained(paths.installation().root(), &docs_root)?;
     if docs_root.exists() {
@@ -50,6 +61,15 @@ pub fn build(paths: &EnvironmentPaths, manifest: &WorkspaceManifest) -> Result<P
                 paths.installation().root().join("rustup-home"),
             )
             .env("PATH", workflow::managed_path(paths)?)
+            .env(
+                "RUSTUP_TOOLCHAIN",
+                toolchain_bin
+                    .parent()
+                    .and_then(Path::file_name)
+                    .unwrap_or_default(),
+            )
+            .env("RUSTC", &rustc)
+            .env("RUSTDOC", &rustdoc)
             .env_remove("RUSTC_WRAPPER")
             .env("CARGO_TARGET_DIR", &target)
             .current_dir(paths.source().root())

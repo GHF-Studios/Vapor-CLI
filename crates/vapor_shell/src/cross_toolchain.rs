@@ -30,7 +30,11 @@ pub(crate) fn inspect(root: &Path) -> CrossToolchainStatus {
             clang.display()
         ));
     }
-    for tool in ["x86_64-w64-mingw32-dlltool", "llvm-dlltool"] {
+    for tool in [
+        "x86_64-w64-mingw32-dlltool",
+        "llvm-dlltool",
+        "x86_64-w64-mingw32-ar",
+    ] {
         let path = llvm_mingw_bin(root).join(tool);
         if !is_executable(&path) {
             missing.push(format!(
@@ -64,7 +68,14 @@ pub(crate) fn configure_linker_env(
 ) -> Result<(), String> {
     if target == WINDOWS_GNU_TARGET {
         require_ready(root, target)?;
-        command.env(cargo_linker_env(target), llvm_mingw_clang(root));
+        let compiler = llvm_mingw_clang(root);
+        command
+            .env(cargo_linker_env(target), &compiler)
+            .env(cargo_compiler_env(target), &compiler)
+            .env(
+                cargo_archiver_env(target),
+                llvm_mingw_bin(root).join("x86_64-w64-mingw32-ar"),
+            );
     } else if needs_zig_linker(target) {
         require_ready(root, target)?;
         command.env(cargo_linker_env(target), zig_linker_path(root, target));
@@ -165,6 +176,14 @@ fn cargo_linker_env(target: &str) -> String {
         "CARGO_TARGET_{}_LINKER",
         target.replace('-', "_").to_ascii_uppercase()
     )
+}
+
+fn cargo_compiler_env(target: &str) -> String {
+    format!("CC_{target}")
+}
+
+fn cargo_archiver_env(target: &str) -> String {
+    format!("AR_{target}")
 }
 
 fn host_runtime_target() -> String {

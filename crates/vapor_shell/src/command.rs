@@ -20,7 +20,6 @@ use crate::{
     workflow::{self, CargoWorkflow, ProjectSelection},
     workspace::{SourceRootKind, WorkspaceManifest},
 };
-use vapor_core::{LocalClientDeploymentOutcome, deploy_client_locally};
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::Deserialize;
 use std::{
@@ -29,6 +28,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
+use vapor_core::{LocalClientDeploymentOutcome, deploy_client_locally};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -721,7 +721,9 @@ pub(super) fn execute_client(command: ClientCommand) -> Result<(), String> {
                 println!("Shell activation: {}", report.activation_script.display());
                 println!("Source bootstrap: {}", source_bootstrap.display());
                 if let Some(error) = synchronization_warning {
-                    eprintln!("warning: local Client deployment succeeded, but the existing development environment could not be synchronized: {error}");
+                    eprintln!(
+                        "warning: local Client deployment succeeded, but the existing development environment could not be synchronized: {error}"
+                    );
                 }
             }
         },

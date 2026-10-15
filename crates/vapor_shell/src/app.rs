@@ -43,9 +43,7 @@ pub fn run() -> Result<(), String> {
 
     diagnostics::init_from_current_exe(startup.diagnostics);
     let result = match startup.mode {
-        StartupMode::Direct(ShellCommand::Client { command }) => {
-            command::execute_client(command)
-        }
+        StartupMode::Direct(ShellCommand::Client { command }) => command::execute_client(command),
         mode => run_inner(mode),
     };
     if let Err(error) = &result {
