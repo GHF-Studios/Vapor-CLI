@@ -17,7 +17,7 @@ use vapor_sdk_core::steam::types::SteamCommand;
 use vapor_sdk_core::{
     EnvironmentCommand, GlobalOptions, SdkCommand, ToolchainCommand, WorkspaceCommand,
     environment_status, toolchain_install, toolchain_status, workspace_build, workspace_check,
-    workspace_deploy, workspace_fmt, workspace_status, workspace_sync,
+    workspace_deploy, workspace_fmt, workspace_status, workspace_sync, workspace_test,
 };
 
 pub(crate) fn print_command(
@@ -45,6 +45,9 @@ pub(crate) fn print_command(
         }
         SdkCommand::Workspace(WorkspaceCommand::Build) => {
             workspace::print_cargo(&globals, &spec, workspace_build(&globals)?)
+        }
+        SdkCommand::Workspace(WorkspaceCommand::Test) => {
+            workspace::print_cargo(&globals, &spec, workspace_test(&globals)?)
         }
         SdkCommand::Workspace(WorkspaceCommand::Deploy) => {
             workspace::print_deploy(&globals, &spec, workspace_deploy(&globals)?)

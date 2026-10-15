@@ -156,6 +156,17 @@ pub struct InstallationPaths {
 }
 
 impl InstallationPaths {
+    /// Discover an installation from any packaged application executable that
+    /// shares a directory with the app-owned `vapor` command.
+    ///
+    /// This lets GUI facades use the same installation-owned providers without
+    /// guessing app-data locations or duplicating the Steam app-root model.
+    pub fn from_application_executable(executable: &Path) -> Result<Self, String> {
+        let executable = canonical_file(executable, "Vapor application executable")?;
+        let command = executable.with_file_name(format!("vapor{}", env::consts::EXE_SUFFIX));
+        Self::from_executable(&command)
+    }
+
     /// Discover an installation from the canonical executable location.
     ///
     /// The executable must be laid out as `<app-root>/bin/vapor[.exe]` or

@@ -12,7 +12,7 @@ use crate::{
     diagnostics::{self, UploadOptions},
     discovery::{EnvironmentPaths, ensure_contained},
     distribution::StageOptions,
-    documentation, git_provider, ide, manifest,
+    documentation, git_provider, ide,
     metadata::{MetadataFormat, ResolvedMetadata, ValidationPlan},
     source as source_tools, source_registry,
     state::ShellState,
@@ -21,12 +21,10 @@ use crate::{
     workspace::{SourceRootKind, WorkspaceManifest},
 };
 use clap::{Parser, Subcommand, ValueEnum};
-use serde::Deserialize;
 use std::{
     collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
-    process::Command,
 };
 use vapor_core::{LocalClientDeploymentOutcome, deploy_client_locally};
 
@@ -778,108 +776,52 @@ fn launch_packagepack_composition(
     launch_request: &str,
     selection: content::PackagepackSelection,
 ) -> Result<(), String> {
+    let plan = content::prepare_packagepack_launch(state.installation(), selection.artifact_id())?;
+    if plan.packagepack_root() != selection.installed_root() {
+        return Err(format!(
+            "selected Packagepack '{}' changed after selection; select it again before launch",
+            selection.artifact_id()
+        ));
+    }
     println!("Launch composition");
     println!();
     println!("Launch request");
     println!("  request: {launch_request}");
     println!();
     println!("Content composition");
-    println!("  packagepack: {}", selection.artifact_id());
-    println!("    root: {}", selection.installed_root().display());
+    println!("  packagepack: {}", plan.packagepack_id());
+    println!("    root: {}", plan.packagepack_root().display());
     diagnostics::event(format!(
         "launch selection: {} at {}",
-        selection.artifact_id(),
-        selection.installed_root().display()
+        plan.packagepack_id(), plan.packagepack_root().display()
     ));
-    diagnostics::record_selected_packagepack(selection.artifact_id(), selection.installed_root());
-
-    let reports = content::verify(state.installation(), None)?;
-    diagnostics::event(format!("content verify reports: {}", reports.len()));
-    if reports.is_empty() {
-        println!("  Installed content: none");
-        println!();
-        print_default_first_run_next();
-        return Ok(());
+    diagnostics::record_selected_packagepack(plan.packagepack_id(), plan.packagepack_root());
+    println!("  Installed content: verified ({} graph node(s))", plan.verified_ids().len());
+    for id in plan.verified_ids() {
+        println!("    - {id}");
     }
-    let broken = reports
-        .iter()
-        .filter(|report| !report.ok())
-        .collect::<Vec<_>>();
-    if !broken.is_empty() {
-        println!("  Installed content: needs repair");
-        for report in broken {
-            println!("    - {}: {}", report.artifact_id(), report.detail());
-        }
-        println!();
-        println!("Next");
-        println!("  content repair");
-        return Ok(());
-    }
-    println!("  Installed content: verified ({} item(s))", reports.len());
-
-    let dependencies = selected_packagepack_dependencies(selection.installed_root())?;
-    if dependencies.is_empty() {
-        println!("  dependencies: none declared");
-    } else {
-        println!("  dependencies:");
-        for dependency in &dependencies {
-            println!("    - {}: {}", dependency.relationship, dependency.id);
-        }
-    }
-
-    let engine_id =
-        required_packagepack_dependency_id(selection.installed_root(), &dependencies, "engine")?;
-    let game_id = packagepack_dependency_id(&dependencies, "game");
-    let layout = content::ContentLayout::new(state.installation());
-    let engine_root = layout.installed().join(&engine_id);
-    let game_root = game_id
-        .as_ref()
-        .map(|game_id| layout.installed().join(game_id));
-    let runtime_target = content::host_runtime_target();
-    let binary = engine_launch_binary(&engine_root, &runtime_target)?;
-    diagnostics::event(format!(
-        "engine dependency handoff binary: {} ({runtime_target})",
-        binary.display()
-    ));
-    diagnostics::record_engine_handoff(&engine_id, &engine_root, &runtime_target, &binary);
-
+    println!();
     println!("Engine content");
-    println!("  id: {engine_id}");
-    println!("  root: {}", engine_root.display());
-    println!("    runtime target: {runtime_target}");
-    println!("    binary: {}", binary.display());
-    if let (Some(game_id), Some(game_root)) = (game_id.as_deref(), game_root.as_ref()) {
+    println!("  id: {}", plan.engine_id());
+    println!("  root: {}", plan.engine_root().display());
+    println!("    runtime target: {}", plan.runtime_target());
+    println!("    binary: {}", plan.binary().display());
+    diagnostics::event(format!(
+        "engine dependency handoff binary: {} ({})",
+        plan.binary().display(), plan.runtime_target()
+    ));
+    diagnostics::record_engine_handoff(plan.engine_id(), plan.engine_root(), plan.runtime_target(), plan.binary());
+    if let (Some(game_id), Some(game_root)) = (plan.game_id(), plan.game_root()) {
         println!("Game content");
         println!("  id: {game_id}");
         println!("  root: {}", game_root.display());
     }
     println!();
     println!("Handoff");
-    println!("  engine binary: {}", binary.display());
-
-    let mut command = Command::new(&binary);
-    command
-        .current_dir(selection.installed_root())
-        .env("VAPOR_LAUNCH_REQUEST", launch_request)
-        .env("VAPOR_PACKAGEPACK_ID", selection.artifact_id())
-        .env("VAPOR_PACKAGEPACK_ROOT", selection.installed_root())
-        .env("VAPOR_ENGINE_ID", &engine_id)
-        .env("VAPOR_ENGINE_ROOT", &engine_root)
-        .env("VAPOR_RUNTIME_TARGET", &runtime_target);
-    if let (Some(game_id), Some(game_root)) = (game_id.as_deref(), game_root.as_ref()) {
-        command
-            .env("VAPOR_GAME_ID", game_id)
-            .env("VAPOR_GAME_ROOT", game_root);
-    }
-    let status = command
-        .status()
-        .map_err(|error| format!("failed to launch '{}': {error}", binary.display()))?;
-    diagnostics::event(format!("engine dependency exited with {status}"));
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("engine content {engine_id} exited with {status}"))
-    }
+    println!("  engine binary: {}", plan.binary().display());
+    content::run_packagepack_launch(&plan, launch_request, &[])?;
+    diagnostics::event(format!("engine dependency exited successfully: {}", plan.engine_id()));
+    Ok(())
 }
 
 fn print_default_first_run() {
@@ -949,124 +891,6 @@ fn ensure_default_packagepack_installed_and_selected(
     Ok(selection)
 }
 
-fn selected_packagepack_dependencies(
-    packagepack_root: &Path,
-) -> Result<Vec<LaunchReference>, String> {
-    let manifest = packagepack_root.join(manifest::PACKAGEPACK_FILE_NAME);
-    let source = fs::read_to_string(&manifest)
-        .map_err(|error| format!("failed to read '{}': {error}", manifest.display()))?;
-    let parsed: LaunchManifest = toml::from_str(&source)
-        .map_err(|error| format!("failed to parse '{}': {error}", manifest.display()))?;
-    let packagepack = parsed.packagepack.ok_or_else(|| {
-        format!(
-            "selected packagepack manifest '{}' has no [packagepack] section",
-            manifest.display()
-        )
-    })?;
-    Ok(packagepack.dependencies)
-}
-
-fn required_packagepack_dependency_id(
-    packagepack_root: &Path,
-    dependencies: &[LaunchReference],
-    relationship: &str,
-) -> Result<String, String> {
-    packagepack_dependency_id(dependencies, relationship).ok_or_else(|| {
-        format!(
-            "selected packagepack '{}' has no required {relationship} dependency",
-            packagepack_root
-                .join(manifest::PACKAGEPACK_FILE_NAME)
-                .display()
-        )
-    })
-}
-
-fn packagepack_dependency_id(
-    dependencies: &[LaunchReference],
-    relationship: &str,
-) -> Option<String> {
-    dependencies
-        .iter()
-        .find(|dependency| dependency.relationship == relationship)
-        .map(|dependency| dependency.id.clone())
-}
-
-fn engine_launch_binary(engine_root: &Path, runtime_target: &str) -> Result<PathBuf, String> {
-    let manifest = engine_root.join(manifest::ENGINE_FILE_NAME);
-    let source = fs::read_to_string(&manifest)
-        .map_err(|error| format!("failed to read '{}': {error}", manifest.display()))?;
-    let parsed: LaunchManifest = toml::from_str(&source)
-        .map_err(|error| format!("failed to parse '{}': {error}", manifest.display()))?;
-    let engine = parsed.engine.ok_or_else(|| {
-        format!(
-            "resolved engine content manifest '{}' has no [engine] section",
-            manifest.display()
-        )
-    })?;
-    let runtime = engine
-        .runtime
-        .iter()
-        .find(|runtime| runtime.target == runtime_target)
-        .ok_or_else(|| {
-            format!(
-                "resolved engine content '{}' has no runtime payload for {runtime_target}\nhelp: install content built for this platform",
-                manifest.display()
-            )
-        })?;
-    let binary_name = runtime.binaries.first().ok_or_else(|| {
-        format!(
-            "resolved engine content '{}' declares no runtime binary for {runtime_target}",
-            manifest.display()
-        )
-    })?;
-    let binary = engine_root
-        .join("bin")
-        .join(runtime_target)
-        .join(binary_name);
-    if binary.is_file() {
-        Ok(binary)
-    } else {
-        Err(format!(
-            "resolved engine content binary is missing: {}\nhelp: deploy or install content with runtime outputs",
-            binary.display()
-        ))
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct LaunchManifest {
-    packagepack: Option<LaunchContent>,
-    engine: Option<LaunchContent>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-struct LaunchContent {
-    #[serde(default)]
-    runtime: Vec<LaunchRuntime>,
-    #[serde(default)]
-    dependencies: Vec<LaunchReference>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-struct LaunchRuntime {
-    target: String,
-    #[serde(default)]
-    binaries: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-struct LaunchReference {
-    id: String,
-    #[serde(default = "default_launch_relationship")]
-    relationship: String,
-}
-
-fn default_launch_relationship() -> String {
-    "dependency".to_owned()
-}
 
 fn execute_source(command: SourceCommand, state: &mut ShellState) -> Result<(), String> {
     match command {
