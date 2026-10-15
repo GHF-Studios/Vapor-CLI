@@ -153,7 +153,17 @@ Application workspaces that contribute installed commands may add
 `binaries = ["name"]` under `[workspace]`. `root build` promotes those Cargo
 binary outputs from `output/dev/<workspace>/debug/` or
 `output/dev/<workspace>/<target>/debug/` into the app root's
-`bin/<target>/`. Content-only workspaces should omit it.
+`bin/<target>/`. Content-only workspaces should omit it. Application
+workspaces may also declare `[workspace.runtime.libraries]` as a mapping from
+target triples to portable file names. These runtime support files are promoted
+beside that target's binaries; missing declared files fail deployment rather
+than silently producing a broken app.
+
+```toml
+[workspace.runtime.libraries]
+x86_64-unknown-linux-gnu = ["libsteam_api.so"]
+x86_64-pc-windows-gnullvm = ["steam_api64.dll"]
+```
 
 ## Content packages
 

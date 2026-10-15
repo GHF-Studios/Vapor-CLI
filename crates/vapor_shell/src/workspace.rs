@@ -12,7 +12,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     fs,
     path::{Component, Path, PathBuf},
 };
@@ -46,6 +46,7 @@ pub struct CargoProject {
     manifest: PathBuf,
     documentation: bool,
     binaries: Vec<String>,
+    libraries: BTreeMap<String, Vec<String>>,
 }
 
 /// One Vapor-managed child content artifact registered by a workspace.
@@ -183,6 +184,11 @@ impl CargoProject {
     pub fn binaries(&self) -> &[String] {
         &self.binaries
     }
+
+    /// Runtime support files promoted beside this project's binaries.
+    pub fn libraries(&self, target: &str) -> &[String] {
+        self.libraries.get(target).map(Vec::as_slice).unwrap_or_default()
+    }
 }
 
 impl WorkspaceProject {
@@ -239,11 +245,13 @@ fn discover_workspace_cargo(root: &Path, name: &str) -> Result<Vec<CargoProject>
             absolute.display()
         ));
     }
+    let marker = manifest::source_root_marker(root)?;
     Ok(vec![CargoProject {
         name: name.to_owned(),
         manifest,
         documentation: true,
-        binaries: workspace_binaries(&manifest::source_root_marker(root)?)?,
+        binaries: workspace_binaries(&marker)?,
+        libraries: workspace_libraries(&marker)?,
     }])
 }
 
@@ -344,12 +352,18 @@ fn discover_root_cargo_workspaces(root: &Path) -> Result<Vec<CargoProject>, Stri
             } else {
                 Vec::new()
             };
+            let libraries = if let Some(marker) = &marker {
+                workspace_libraries(marker)?
+            } else {
+                Vec::new()
+            };
 
             Ok(CargoProject {
                 name,
                 manifest: path.join("Cargo.toml"),
                 documentation: true,
                 binaries,
+                libraries,
             })
         })
         .collect()
@@ -387,6 +401,24 @@ fn workspace_binaries(marker: &Path) -> Result<Vec<String>, String> {
     let policy = read_workspace_policy(marker)?;
     validate_binary_names(&policy.binaries, marker)?;
     Ok(policy.binaries)
+}
+
+fn workspace_libraries(marker: &Path) -> Result<BTreeMap<String, Vec<String>>, String> {
+    let policy = read_workspace_policy(marker)?;
+    for (target, libraries) in &policy.runtime.libraries {
+        let valid = !target.is_empty()
+            && target.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+            });
+        if !valid {
+            return Err(format!(
+                "runtime library target must be a Rust target triple in '{}': {target}",
+                marker.display()
+            ));
+        }
+        validate_runtime_file_names(libraries, marker, "library")?;
+    }
+    Ok(policy.runtime.libraries)
 }
 
 fn discover_workspace_projects(root: &Path) -> Result<Vec<WorkspaceProject>, String> {
@@ -476,7 +508,15 @@ struct WorkspacePolicy {
     #[serde(default)]
     binaries: Vec<String>,
     #[serde(default)]
+    runtime: WorkspaceRuntimePolicy,
+    #[serde(default)]
     projects: Vec<WorkspaceProjectConfig>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct WorkspaceRuntimePolicy {
+    #[serde(default)]
+    libraries: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -571,6 +611,32 @@ fn validate_binary_names(names: &[String], marker: &Path) -> Result<(), String> 
     Ok(())
 }
 
+fn validate_runtime_file_names(names: &[String], marker: &Path, kind: &str) -> Result<(), String> {
+    let mut seen = HashSet::new();
+    for name in names {
+        if name.is_empty()
+            || name == "."
+            || name == ".."
+            || name.chars().any(|character| {
+                !character.is_ascii_alphanumeric() && !matches!(character, '-' | '_' | '.')
+            })
+        {
+            return Err(format!(
+                "workspace {kind} names in '{}' must be safe file names",
+                marker.display()
+            ));
+        }
+        if !seen.insert(name.to_ascii_lowercase()) {
+            return Err(format!(
+                "duplicate workspace {kind} '{}' in '{}'",
+                name,
+                marker.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn validate_relative(path: &Path) -> Result<(), String> {
     if path.as_os_str().is_empty()
         || path.is_absolute()
@@ -587,5 +653,30 @@ fn validate_relative(path: &Path) -> Result<(), String> {
         ))
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_runtime_file_names;
+    use std::path::Path;
+
+    #[test]
+    fn runtime_file_names_are_portable_basenames() {
+        let marker = Path::new("Workspace.vapor.toml");
+        assert!(validate_runtime_file_names(
+            &["libsteam_api.so".to_owned(), "steam_api64.dll".to_owned()],
+            marker,
+            "library"
+        )
+        .is_ok());
+        assert!(validate_runtime_file_names(&["../steam_api.so".to_owned()], marker, "library")
+            .is_err());
+        assert!(validate_runtime_file_names(
+            &["Steam_API.dll".to_owned(), "steam_api.dll".to_owned()],
+            marker,
+            "library"
+        )
+        .is_err());
     }
 }

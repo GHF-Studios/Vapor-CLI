@@ -194,8 +194,11 @@ source content merely because they exist on disk.
 
 A workspace that contributes installed app commands may declare
 `binaries = ["name"]` under `[workspace]`; root workflows promote those Cargo
-binary outputs into the app root's `bin/<target>/`. Content workspaces should
-not declare promoted app binaries.
+binary outputs into the app root's `bin/<target>/`. Platform-specific support
+files can be declared under `[workspace.runtime.libraries]` as target-triple
+keys with arrays of portable file names. They are promoted beside binaries and
+missing declared files fail the workflow. Content workspaces should not declare
+promoted app binaries or runtime libraries.
 
 ### Registry
 

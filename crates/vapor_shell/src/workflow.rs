@@ -204,6 +204,33 @@ pub fn promote_for_targets(
                 promoted += 1;
             }
         }
+        for target in &targets {
+            for library in project.libraries(target.triple()) {
+                let source = target
+                    .build_output_root(installation, project.name())
+                    .join(library);
+                ensure_contained(installation, &source)?;
+                if !source.is_file() {
+                    return Err(format!(
+                        "built runtime library is missing for project '{}' target '{}': {}",
+                        project.name(),
+                        target.triple(),
+                        source.display()
+                    ));
+                }
+                let destination = installation
+                    .join("bin")
+                    .join(target.triple())
+                    .join(library);
+                ensure_contained(installation, &destination)?;
+                promote_file(&source, &destination)?;
+                println!(
+                    "promoted runtime library {} -> {}",
+                    source.display(),
+                    destination.display()
+                );
+            }
+        }
     }
     Ok(promoted)
 }
