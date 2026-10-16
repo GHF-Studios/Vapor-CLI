@@ -188,6 +188,13 @@ title = "Spacetime Engine"
 tags = ["engine", "first-party", "loo-cast"]
 ```
 
+The top-level `[[project]]` list and `[workspace].projects` answer different
+questions. `[[project]]` names Cargo roots for Vapor-managed development and run
+configurations; `[workspace].projects` registers Vapor content artifacts for
+content discovery and publication. Code-bearing content can be a Cargo member
+without becoming another Cargo root. Metadata-only packs appear in the Vapor
+content registry without joining Cargo.
+
 Supported content filenames and sections are:
 
 - `Engine.vapor.toml` with `[engine]`
