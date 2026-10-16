@@ -1731,13 +1731,22 @@ fn validate_local_source_graph(
         if !visiting.insert(id.to_owned()) {
             return Err(format!("source content dependency cycle reaches {id}"));
         }
-        for dependency in artifact.dependencies().iter().filter(|edge| !edge.optional()) {
+        for dependency in artifact.dependencies() {
             let requirement = dependency.version().map(semver::VersionReq::parse).transpose()
                 .map_err(|error| format!("{} has an invalid version requirement for {}: {error}", artifact.id(), dependency.id()))?;
-            let child = find_local_source(catalog, dependency.id(), requirement.as_ref()).ok_or_else(|| format!(
-                "local composition rule: {} requires {} {}, but no matching version is authored in this workspace",
-                artifact.id(), dependency.id(), dependency.version().unwrap_or_default()
-            ))?;
+            let child = find_local_source(catalog, dependency.id(), requirement.as_ref());
+            let Some(child) = child else {
+                if dependency.optional() {
+                    // An absent optional node is not in this resolved local graph.
+                    continue;
+                }
+                return Err(format!(
+                    "local composition rule: {} requires {} {}, but no matching version is authored in this workspace",
+                    artifact.id(), dependency.id(), dependency.version().unwrap_or_default()
+                ));
+            };
+            // Traverse optional nodes too when they are locally available: their
+            // own required descendants and cycles are still part of this graph.
             visit(catalog, root_id, child, visiting, visited)?;
         }
         visiting.remove(id);
