@@ -246,6 +246,10 @@ Current design rules:
   or one gamepack, zero or more modpacks, and optional direct mods;
 - extension mods can extend any mod, including another extension mod.
 
+Vapor Shell applies these role and cardinality rules during source validation
+and structured dependency-graph saves. Local dependency versions and content
+kinds are checked against the selected workspace catalog before a graph write.
+
 There is no separate `binding` declaration in the design model. Composition
 edges and slot/provider relationships are resolved relationships between
 declared artifacts and capabilities.

@@ -303,7 +303,7 @@ fn default_reference_relationship() -> String {
     "dependency".to_owned()
 }
 
-/// One editable edge in a source Packagepack composition.
+/// One editable edge in a source content dependency graph.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompositionLink {
     pub id: String,
@@ -323,6 +323,8 @@ pub struct CompositionLink {
 pub struct SourceComposition {
     pub id: String,
     pub version: Option<String>,
+    #[serde(default)]
+    pub kind: String,
     pub manifest: PathBuf,
     pub source: String,
     pub links: Vec<CompositionLink>,
@@ -1836,7 +1838,7 @@ pub fn adopt_source_project(paths: &EnvironmentPaths, project_path: &Path) -> Re
     Ok(format!("Registered {kind} content {id} from {}.", project_path.display()))
 }
 
-/// Load the editable dependency graph for a locally authored Packagepack.
+/// Load the editable dependency graph for a locally authored content project.
 pub fn load_source_composition(
     paths: &EnvironmentPaths,
     selector: &str,
@@ -1844,33 +1846,31 @@ pub fn load_source_composition(
     let catalog = discover(paths)?;
     let artifact = catalog
         .find(selector)
-        .ok_or_else(|| format!("Packagepack is no longer available in this workspace: {selector}"))?;
-    if artifact.kind() != ContentKind::Packagepack {
-        return Err(format!("{} is {}, not a Packagepack", artifact.id(), artifact.kind()));
-    }
+        .ok_or_else(|| format!("source content is no longer available in this workspace: {selector}"))?;
     let root = fs::canonicalize(paths.source().root())
         .map_err(io("resolve source workspace", paths.source().root()))?;
     let metadata = fs::symlink_metadata(artifact.manifest())
-        .map_err(io("inspect Packagepack manifest", artifact.manifest()))?;
+        .map_err(io("inspect content manifest", artifact.manifest()))?;
     if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
-        return Err(format!("Packagepack manifest must be a regular file: {}", artifact.manifest().display()));
+        return Err(format!("content manifest must be a regular file: {}", artifact.manifest().display()));
     }
     let manifest = fs::canonicalize(artifact.manifest())
-        .map_err(io("resolve Packagepack manifest", artifact.manifest()))?;
+        .map_err(io("resolve content manifest", artifact.manifest()))?;
     if !manifest.starts_with(&root) {
-        return Err("Packagepack manifest resolves outside the selected workspace".to_owned());
+        return Err("content manifest resolves outside the selected workspace".to_owned());
     }
-    let source = fs::read_to_string(&manifest).map_err(io("read Packagepack manifest", &manifest))?;
+    let source = fs::read_to_string(&manifest).map_err(io("read content manifest", &manifest))?;
     Ok(SourceComposition {
         id: artifact.id().to_owned(),
         version: artifact.version().map(ToOwned::to_owned),
+        kind: artifact.kind().to_string(),
         manifest,
         source,
         links: artifact.dependencies().iter().map(CompositionLink::from).collect(),
     })
 }
 
-/// Replace a source Packagepack's dependency graph after validating the exact
+/// Replace a source content project's dependency graph after validating the exact
 /// source snapshot and each selected edge against the live workspace catalog.
 pub fn save_source_composition(
     paths: &EnvironmentPaths,
@@ -1880,7 +1880,7 @@ pub fn save_source_composition(
 ) -> Result<SourceComposition, String> {
     let current = load_source_composition(paths, selector)?;
     if current.source != expected_source {
-        return Err("Packagepack changed on disk since it was opened; reload it before saving".to_owned());
+        return Err("content manifest changed on disk since it was opened; reload it before saving".to_owned());
     }
     let lock_path = current.manifest.with_extension("vapor-edit.lock");
     let lock_file = fs::OpenOptions::new()
@@ -1890,15 +1890,16 @@ pub fn save_source_composition(
         .map_err(|error| format!("cannot acquire composition edit lock '{}': {error}", lock_path.display()))?;
     let lock = SourceManifestEditLock { path: lock_path, file: Some(lock_file) };
     let locked_source = fs::read_to_string(&current.manifest)
-        .map_err(io("re-read Packagepack manifest", &current.manifest))?;
+        .map_err(io("re-read content manifest", &current.manifest))?;
     if locked_source != expected_source {
-        return Err("Packagepack changed while the edit was being prepared; reload it before saving".to_owned());
+        return Err("content manifest changed while the edit was being prepared; reload it before saving".to_owned());
     }
 
     let catalog = discover(paths)?;
-    let root_id = catalog.find(selector)
-        .ok_or_else(|| format!("Packagepack is no longer available in this workspace: {selector}"))?
-        .id().to_owned();
+    let root = catalog.find(selector)
+        .ok_or_else(|| format!("source content is no longer available in this workspace: {selector}"))?;
+    let root_id = root.id().to_owned();
+    let root_kind = root.kind();
     let mut selected = Vec::with_capacity(links.len());
     let mut seen = BTreeSet::new();
     for link in links {
@@ -1913,55 +1914,73 @@ pub fn save_source_composition(
         let child = find_local_source(&catalog, &link.id, requirement.as_ref())
             .ok_or_else(|| format!("selected content is no longer available at the requested version in this workspace: {} {}", link.id, link.version.as_deref().unwrap_or("")))?;
         if child.id() == root_id {
-            return Err("a Packagepack cannot depend on itself".to_owned());
+            return Err("source content cannot depend on itself".to_owned());
         }
-        if !source_dependency_allowed(ContentKind::Packagepack, child.kind()) {
-            return Err(format!("{} cannot be included in a Packagepack", child.kind()));
-        }
-        let expected_relationship = match child.kind() {
-            ContentKind::Engine => "engine",
-            ContentKind::Enginepack => "enginepack",
-            ContentKind::Game => "game",
-            ContentKind::Gamepack => "gamepack",
-            _ => "dependency",
-        };
-        if link.relationship != expected_relationship {
+        let expected_relationship = source_dependency_relationship(root_kind, child.kind())
+            .ok_or_else(|| format!("{} cannot be included in a {root_kind}", child.kind()))?;
+        let preserves_existing_relationship = expected_relationship == "dependency"
+            && current.links.iter().any(|existing| {
+                existing.id == link.id && existing.relationship == link.relationship
+            });
+        if link.relationship != expected_relationship && !preserves_existing_relationship {
             return Err(format!("{} must use the '{}' relationship, not '{}'", child.id(), expected_relationship, link.relationship));
+        }
+        if link.optional && matches!(link.relationship.as_str(), "engine" | "enginepack") {
+            return Err(format!("{} cannot mark its required Engine relationship optional", root_kind));
+        }
+        if link.optional && root_kind == ContentKind::Gamepack && link.relationship == "game" {
+            return Err("a Gamepack cannot mark its required Game relationship optional".to_owned());
         }
         selected.push(child);
     }
-    validate_composition_children(ContentKind::Packagepack, &selected)?;
+    validate_composition_children(root_kind, &selected)?;
     validate_local_source_graph(&catalog, &root_id, &selected)?;
 
     let mut document = expected_source
         .parse::<toml_edit::DocumentMut>()
-        .map_err(|error| format!("Packagepack manifest is not valid TOML: {error}"))?;
-    let packagepack = document
-        .get_mut("packagepack")
+        .map_err(|error| format!("content manifest is not valid TOML: {error}"))?;
+    let role = root_kind.to_string();
+    let role_table = document
+        .get_mut(role.as_str())
         .and_then(toml_edit::Item::as_table_mut)
-        .ok_or_else(|| "Packagepack manifest has no [packagepack] table".to_owned())?;
+        .ok_or_else(|| format!("source manifest has no [{role}] table"))?;
+    let mut existing_direct_edges = BTreeMap::new();
     for relationship in ["engine", "enginepack", "game", "gamepack"] {
-        packagepack.remove(relationship);
+        if let Some(toml_edit::Item::Table(table)) = role_table.remove(relationship) {
+            existing_direct_edges.insert(relationship.to_owned(), table);
+        }
     }
-    packagepack.remove("dependencies");
+    let mut existing_dependencies = BTreeMap::new();
+    if let Some(toml_edit::Item::ArrayOfTables(dependencies)) = role_table.remove("dependencies") {
+        for table in dependencies.iter() {
+            let Some(id) = table.get("id").and_then(toml_edit::Item::as_str) else { continue; };
+            let relationship = table
+                .get("relationship")
+                .and_then(toml_edit::Item::as_str)
+                .unwrap_or("dependency");
+            existing_dependencies.insert((id.to_owned(), relationship.to_owned()), table.clone());
+        }
+    }
     let mut dependencies = toml_edit::ArrayOfTables::new();
-    for link in links {
-        let mut reference = toml_edit::Table::new();
-        reference.insert("id", toml_edit::value(link.id.clone()));
-        if let Some(version) = &link.version { reference.insert("version", toml_edit::value(version.clone())); }
-        if link.optional { reference.insert("optional", toml_edit::value(true)); }
-        if let Some(workshop_id) = &link.workshop_id { reference.insert("workshop_id", toml_edit::value(workshop_id.clone())); }
-        if let Some(reason) = &link.reason { reference.insert("reason", toml_edit::value(reason.clone())); }
-        match link.relationship.as_str() {
-            "engine" | "enginepack" | "game" | "gamepack" => {
-                packagepack.insert(link.relationship.as_str(), toml_edit::Item::Table(reference));
-            }
-            "dependency" => dependencies.push(reference),
-            other => return Err(format!("unsupported Packagepack relationship: {other}")),
+    for (link, child) in links.iter().zip(&selected) {
+        let expected_relationship = source_dependency_relationship(root_kind, child.kind())
+            .ok_or_else(|| format!("{} cannot be included in a {root_kind}", child.kind()))?;
+        if expected_relationship != "dependency" {
+                let mut reference = existing_direct_edges
+                    .remove(&link.relationship)
+                    .unwrap_or_else(toml_edit::Table::new);
+                update_composition_link_fields(&mut reference, link, false);
+                role_table.insert(link.relationship.as_str(), toml_edit::Item::Table(reference));
+        } else {
+            let mut reference = existing_dependencies
+                .remove(&(link.id.clone(), link.relationship.clone()))
+                .unwrap_or_else(toml_edit::Table::new);
+            update_composition_link_fields(&mut reference, link, true);
+            dependencies.push(reference);
         }
     }
     if !dependencies.is_empty() {
-        packagepack.insert("dependencies", toml_edit::Item::ArrayOfTables(dependencies));
+        role_table.insert("dependencies", toml_edit::Item::ArrayOfTables(dependencies));
     }
     let updated = document.to_string();
     // Confirm the new authored graph is parseable and discoverable before replacing the source.
@@ -1973,22 +1992,22 @@ pub fn save_source_composition(
     let backup = source_manifest_temp_path_with_suffix(&current.manifest, "backup");
     if let Err(error) = fs::rename(&current.manifest, &backup) {
         let _ = fs::remove_file(&temporary);
-        return Err(io("prepare Packagepack manifest replacement", &current.manifest)(error));
+        return Err(io("prepare content manifest replacement", &current.manifest)(error));
     }
     if let Err(error) = fs::rename(&temporary, &current.manifest) {
         let restore = fs::rename(&backup, &current.manifest);
         let _ = fs::remove_file(&temporary);
         return Err(match restore {
-            Ok(()) => io("replace Packagepack manifest", &current.manifest)(error),
-            Err(restore) => format!("failed to replace Packagepack manifest: {error}; recovery failed: {restore}"),
+            Ok(()) => io("replace content manifest", &current.manifest)(error),
+            Err(restore) => format!("failed to replace content manifest: {error}; recovery failed: {restore}"),
         });
     }
     if let Err(error) = discover(paths) {
         let _ = fs::remove_file(&current.manifest);
         let restore = fs::rename(&backup, &current.manifest);
         return Err(match restore {
-            Ok(()) => format!("new Packagepack graph could not be discovered: {error}; original manifest restored"),
-            Err(restore) => format!("new Packagepack graph could not be discovered: {error}; recovery failed: {restore}"),
+            Ok(()) => format!("new content graph could not be discovered: {error}; original manifest restored"),
+            Err(restore) => format!("new content graph could not be discovered: {error}; recovery failed: {restore}"),
         });
     }
     let saved = match load_source_composition(paths, selector) {
@@ -1997,8 +2016,8 @@ pub fn save_source_composition(
             let _ = fs::remove_file(&current.manifest);
             let restore = fs::rename(&backup, &current.manifest);
             return Err(match restore {
-                Ok(()) => format!("saved Packagepack graph could not be reopened: {error}; original manifest restored"),
-                Err(restore) => format!("saved Packagepack graph could not be reopened: {error}; recovery failed: {restore}"),
+                Ok(()) => format!("saved content graph could not be reopened: {error}; original manifest restored"),
+                Err(restore) => format!("saved content graph could not be reopened: {error}; recovery failed: {restore}"),
             });
         }
     };
@@ -2155,6 +2174,33 @@ fn set_optional_toml_value(table: &mut toml_edit::Table, key: &str, value: Optio
     }
 }
 
+fn update_composition_link_fields(
+    table: &mut toml_edit::Table,
+    link: &CompositionLink,
+    write_relationship: bool,
+) {
+    table.insert("id", toml_edit::value(link.id.clone()));
+    set_optional_toml_value(table, "version", link.version.as_deref().map(toml_edit::value));
+    set_optional_toml_value(
+        table,
+        "optional",
+        link.optional.then(|| toml_edit::value(true)),
+    );
+    set_optional_toml_value(
+        table,
+        "workshop_id",
+        link.workshop_id.as_deref().map(toml_edit::value),
+    );
+    set_optional_toml_value(table, "reason", link.reason.as_deref().map(toml_edit::value));
+    if write_relationship {
+        set_optional_toml_value(
+            table,
+            "relationship",
+            (link.relationship != "dependency").then(|| toml_edit::value(link.relationship.clone())),
+        );
+    }
+}
+
 fn validate_workshop_policy_draft(policy: &WorkshopPolicyDraft) -> Result<(), String> {
     if policy.app_id.is_some_and(|app_id| app_id == 0) {
         return Err("Steam AppID must be positive".to_owned());
@@ -2194,7 +2240,7 @@ fn validate_local_source_graph(
     ) -> Result<(), String> {
         let id = artifact.id();
         if id == root_id {
-            return Err(format!("composition graph would cycle back to Packagepack {root_id}"));
+            return Err(format!("composition graph would cycle back to root content {root_id}"));
         }
         if visited.contains(id) { return Ok(()); }
         if !visiting.insert(id.to_owned()) {
@@ -2285,6 +2331,23 @@ pub fn source_dependency_allowed(parent: ContentKind, child: ContentKind) -> boo
     }
 }
 
+/// Return the authored edge name for a supported parent/child role pair.
+pub fn source_dependency_relationship(parent: ContentKind, child: ContentKind) -> Option<&'static str> {
+    if !source_dependency_allowed(parent, child) {
+        return None;
+    }
+    Some(match (parent, child) {
+        (ContentKind::Packagepack, ContentKind::Engine) => "engine",
+        (ContentKind::Packagepack, ContentKind::Enginepack) => "enginepack",
+        (ContentKind::Packagepack, ContentKind::Game) => "game",
+        (ContentKind::Packagepack, ContentKind::Gamepack) => "gamepack",
+        (ContentKind::Game, ContentKind::Engine) => "engine",
+        (ContentKind::Enginepack, ContentKind::Engine) => "engine",
+        (ContentKind::Gamepack, ContentKind::Game) => "game",
+        _ => "dependency",
+    })
+}
+
 /// Create the maintained Engine/Game/Packagepack starter workspace at a new
 /// or empty destination, using the installed app's Steam AppID.
 pub fn create_basic_content_workspace(
@@ -2307,31 +2370,39 @@ fn validate_composition_children(
     kind: ContentKind,
     children: &[&ContentArtifact],
 ) -> Result<(), String> {
-    let count = |matching: fn(ContentKind) -> bool| {
-        children
+    let relationships = children
+        .iter()
+        .filter_map(|child| source_dependency_relationship(kind, child.kind()))
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    validate_source_relationship_cardinality(kind, &relationships)
+}
+
+fn validate_source_relationship_cardinality(
+    kind: ContentKind,
+    relationships: &[String],
+) -> Result<(), String> {
+    let count = |relationship: &str| {
+        relationships
             .iter()
-            .filter(|child| matching(child.kind()))
+            .filter(|value| value.as_str() == relationship)
             .count()
     };
     match kind {
-        ContentKind::Packagepack
-            if count(|kind| matches!(kind, ContentKind::Engine | ContentKind::Enginepack)) != 1 =>
-        {
+        ContentKind::Packagepack if count("engine") + count("enginepack") != 1 => {
             Err("a Packagepack needs exactly one Engine or Enginepack dependency".to_owned())
         }
-        ContentKind::Packagepack
-            if count(|kind| matches!(kind, ContentKind::Game | ContentKind::Gamepack)) > 1 =>
-        {
+        ContentKind::Packagepack if count("game") + count("gamepack") > 1 => {
             Err("a Packagepack can select at most one Game or Gamepack".to_owned())
         }
-        ContentKind::Game if count(|kind| kind == ContentKind::Engine) != 1 => {
+        ContentKind::Game if count("engine") != 1 => {
             Err("a Game needs exactly one Engine dependency".to_owned())
         }
-        ContentKind::Enginepack if count(|kind| kind == ContentKind::Engine) > 1 => {
-            Err("an Enginepack can select at most one Engine".to_owned())
+        ContentKind::Enginepack if count("engine") != 1 => {
+            Err("an Enginepack needs exactly one Engine".to_owned())
         }
-        ContentKind::Gamepack if count(|kind| kind == ContentKind::Game) > 1 => {
-            Err("a Gamepack can select at most one Game".to_owned())
+        ContentKind::Gamepack if count("game") != 1 => {
+            Err("a Gamepack needs exactly one Game".to_owned())
         }
         _ => Ok(()),
     }
@@ -2540,33 +2611,89 @@ pub fn validate(
 ) -> Result<ValidationReport, String> {
     let catalog = discover(paths)?;
     let selected = select_artifacts(&catalog, selector)?;
-    let ids = catalog
-        .artifacts()
-        .iter()
-        .map(|artifact| artifact.id().to_owned())
-        .collect::<BTreeSet<_>>();
     let mut diagnostics = Vec::new();
     let mut errors = Vec::new();
 
     for artifact in &selected {
+        let relationships = artifact
+            .dependencies()
+            .iter()
+            .map(|dependency| dependency.relationship().to_owned())
+            .collect::<Vec<_>>();
+        if let Err(error) = validate_source_relationship_cardinality(artifact.kind(), &relationships) {
+            errors.push(format!("{}: {error}", artifact.id()));
+        }
+        let mut seen_dependencies = BTreeSet::new();
         for dependency in artifact.dependencies() {
-            if !dependency.optional()
-                && !ids.contains(dependency.id())
-                && dependency.workshop_id().is_none()
-            {
+            if !seen_dependencies.insert((dependency.relationship(), dependency.id())) {
                 errors.push(format!(
-                    "{} requires missing {} reference '{}'",
+                    "{} declares duplicate {} reference '{}'",
                     artifact.id(),
                     dependency.relationship(),
                     dependency.id()
                 ));
+                continue;
             }
-            if dependency.optional() && !ids.contains(dependency.id()) {
+            let requirement = match dependency.version().map(semver::VersionReq::parse).transpose() {
+                Ok(requirement) => requirement,
+                Err(error) => {
+                    errors.push(format!(
+                        "{} has an invalid version requirement for {}: {error}",
+                        artifact.id(),
+                        dependency.id()
+                    ));
+                    continue;
+                }
+            };
+            let local_child = find_local_source(&catalog, dependency.id(), requirement.as_ref());
+            if let Some(child) = local_child {
+                if !source_dependency_allowed(artifact.kind(), child.kind()) {
+                    errors.push(format!(
+                        "{} cannot depend on {} content {}",
+                        artifact.kind(),
+                        child.kind(),
+                        child.id()
+                    ));
+                } else if let Some(expected) = source_dependency_relationship(artifact.kind(), child.kind())
+                    && expected != "dependency"
+                    && dependency.relationship() != expected
+                {
+                    errors.push(format!(
+                        "{} reference '{}' must use the '{}' relationship",
+                        artifact.id(),
+                        child.id(),
+                        expected
+                    ));
+                }
+            } else if !dependency.optional() && dependency.workshop_id().is_none() {
+                errors.push(format!(
+                    "{} requires missing {} reference '{}' at version {}",
+                    artifact.id(),
+                    dependency.relationship(),
+                    dependency.id(),
+                    dependency.version().unwrap_or("any")
+                ));
+            } else if dependency.optional() {
                 diagnostics.push(format!(
                     "{} has optional {} reference '{}' outside this workspace",
                     artifact.id(),
                     dependency.relationship(),
                     dependency.id()
+                ));
+            }
+            if dependency.optional()
+                && matches!(
+                    (artifact.kind(), dependency.relationship()),
+                    (ContentKind::Packagepack, "engine" | "enginepack")
+                        | (ContentKind::Game, "engine")
+                        | (ContentKind::Enginepack, "engine")
+                        | (ContentKind::Gamepack, "game")
+                )
+            {
+                errors.push(format!(
+                    "{} cannot mark its required '{}' relationship optional",
+                    artifact.id(),
+                    dependency.relationship()
                 ));
             }
         }
@@ -4993,6 +5120,18 @@ fn composition_edges(kind: ContentKind, content: &AuthoredContent) -> Vec<Conten
             .engine
             .as_ref()
             .map(|reference| reference.to_content_reference("engine", false))
+            .into_iter()
+            .collect(),
+        ContentKind::Enginepack => content
+            .engine
+            .as_ref()
+            .map(|reference| reference.to_content_reference("engine", false))
+            .into_iter()
+            .collect(),
+        ContentKind::Gamepack => content
+            .game
+            .as_ref()
+            .map(|reference| reference.to_content_reference("game", false))
             .into_iter()
             .collect(),
         _ => Vec::new(),
