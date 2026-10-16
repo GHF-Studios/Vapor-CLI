@@ -2576,6 +2576,17 @@ pub fn source_dependency_choice_group(
     }
 }
 
+/// Return the exclusive role slot that must be populated before this content
+/// kind can form a valid project.
+pub fn source_required_dependency_choice_group(parent: ContentKind) -> Option<&'static str> {
+    match parent {
+        ContentKind::Packagepack => Some("engine-choice"),
+        ContentKind::Game | ContentKind::Enginepack => Some("engine"),
+        ContentKind::Gamepack => Some("game"),
+        _ => None,
+    }
+}
+
 /// Create the maintained Engine/Game/Packagepack starter workspace at a new
 /// or empty destination, using the installed app's Steam AppID.
 pub fn create_basic_content_workspace(
