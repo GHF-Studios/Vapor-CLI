@@ -394,6 +394,30 @@ pub struct WorkshopPolicy {
     change_note: Option<String>,
 }
 
+/// Optional Workshop publication metadata supplied when scaffolding content.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WorkshopPolicyDraft {
+    pub app_id: Option<u32>,
+    pub published_file_id: Option<String>,
+    pub visibility: Option<String>,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub tags: Vec<String>,
+    pub change_note: Option<String>,
+}
+
+impl WorkshopPolicyDraft {
+    fn is_empty(&self) -> bool {
+        self.app_id.is_none()
+            && self.published_file_id.is_none()
+            && self.visibility.is_none()
+            && self.title.is_none()
+            && self.description.is_none()
+            && self.tags.is_empty()
+            && self.change_note.is_none()
+    }
+}
+
 impl WorkshopPolicy {
     /// Steam AppID targeted by this Workshop item.
     pub fn app_id(&self) -> Option<u32> {
@@ -1472,6 +1496,25 @@ pub fn create_source_project(
     kind: ContentKind,
     dependency_selectors: &[String],
 ) -> Result<PathBuf, String> {
+    create_source_project_with_workshop(
+        paths,
+        content_id,
+        version,
+        kind,
+        dependency_selectors,
+        &WorkshopPolicyDraft::default(),
+    )
+}
+
+/// Create a role-specific content project with optional Workshop publication metadata.
+pub fn create_source_project_with_workshop(
+    paths: &EnvironmentPaths,
+    content_id: &str,
+    version: &str,
+    kind: ContentKind,
+    dependency_selectors: &[String],
+    workshop: &WorkshopPolicyDraft,
+) -> Result<PathBuf, String> {
     let workspace = WorkspaceManifest::load(paths)?;
     if workspace.kind() != crate::workspace::SourceRootKind::Workspace {
         return Err("new content can only be added to a Vapor workspace".to_owned());
@@ -1582,7 +1625,7 @@ pub fn create_source_project(
             &version.to_string(),
             kind,
         )?;
-        let body = source_project_manifest(name, &version.to_string(), kind, &children, &template);
+        let body = source_project_manifest(name, &version.to_string(), kind, &children, &template, workshop);
         let mut manifest_file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -2229,6 +2272,7 @@ fn source_project_manifest(
     kind: ContentKind,
     children: &[&ContentArtifact],
     template: &crate::source::GeneratedContentProject,
+    workshop: &WorkshopPolicyDraft,
 ) -> String {
     let mut output =
         format!("schema = 1\n\n[{kind}]\nname = \"{name}\"\nversion = \"{version}\"\n");
@@ -2268,6 +2312,46 @@ fn source_project_manifest(
             if let Some(version) = child.version() {
                 output.push_str(&format!("version = \"={version}\"\n"));
             }
+        }
+    }
+    if !workshop.is_empty() {
+        output.push_str(&format!("\n[{kind}.steam]\n"));
+        if let Some(app_id) = workshop.app_id {
+            output.push_str(&format!("app-id = {app_id}\n"));
+        }
+        if let Some(published_file_id) = &workshop.published_file_id {
+            output.push_str(&format!(
+                "published-file-id = {}\n",
+                toml_edit::value(published_file_id).to_string()
+            ));
+        }
+        if let Some(visibility) = &workshop.visibility {
+            output.push_str(&format!(
+                "visibility = {}\n",
+                toml_edit::value(visibility).to_string()
+            ));
+        }
+        if let Some(title) = &workshop.title {
+            output.push_str(&format!("title = {}\n", toml_edit::value(title).to_string()));
+        }
+        if let Some(description) = &workshop.description {
+            output.push_str(&format!(
+                "description = {}\n",
+                toml_edit::value(description).to_string()
+            ));
+        }
+        if !workshop.tags.is_empty() {
+            let mut tags = toml_edit::Array::new();
+            for tag in &workshop.tags {
+                tags.push(tag.as_str());
+            }
+            output.push_str(&format!("tags = {tags}\n"));
+        }
+        if let Some(change_note) = &workshop.change_note {
+            output.push_str(&format!(
+                "change-note = {}\n",
+                toml_edit::value(change_note).to_string()
+            ));
         }
     }
     output
