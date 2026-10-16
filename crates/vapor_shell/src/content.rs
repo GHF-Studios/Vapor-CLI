@@ -1775,16 +1775,6 @@ pub fn adopt_source_project(paths: &EnvironmentPaths, project_path: &Path) -> Re
     }
     let original = fs::read_to_string(&workspace_manifest)
         .map_err(io("read Workspace manifest", &workspace_manifest))?;
-    let lock_path = workspace_manifest.with_file_name(".Workspace.vapor-project.lock");
-    let lock_file = fs::OpenOptions::new().write(true).create_new(true).open(&lock_path)
-        .map_err(|error| format!("cannot acquire Workspace edit lock '{}': {error}", lock_path.display()))?;
-    let lock = SourceManifestEditLock { path: lock_path, file: Some(lock_file) };
-    let current = fs::read_to_string(&workspace_manifest)
-        .map_err(io("re-read Workspace manifest", &workspace_manifest))?;
-    if current != original {
-        return Err("Workspace manifest changed while project adoption was being prepared; retry the action".to_owned());
-    }
-
     let relative_project = project_root.strip_prefix(&source_root)
         .map_err(|error| format!("project folder is outside the Workspace: {error}"))?;
     let relative_project = relative_project.components().map(|component| component.as_os_str().to_string_lossy())
@@ -1809,27 +1799,13 @@ pub fn adopt_source_project(paths: &EnvironmentPaths, project_path: &Path) -> Re
         }
     }
 
-    let temporary = source_manifest_temp_path(&workspace_manifest);
     let updated = document.to_string();
-    if let Err(error) = write_source_manifest_temp(&temporary, &updated, &workspace_manifest) {
-        let _ = fs::remove_file(&temporary);
-        return Err(error);
-    }
-    let backup = source_manifest_temp_path_with_suffix(&workspace_manifest, "backup");
-    if let Err(error) = fs::rename(&workspace_manifest, &backup) {
-        let _ = fs::remove_file(&temporary);
-        return Err(io("prepare Workspace manifest replacement", &workspace_manifest)(error));
-    }
-    if let Err(error) = fs::rename(&temporary, &workspace_manifest) {
-        let restore = fs::rename(&backup, &workspace_manifest);
-        let _ = fs::remove_file(&temporary);
-        return Err(match restore {
-            Ok(()) => io("replace Workspace manifest", &workspace_manifest)(error),
-            Err(restore) => format!("failed to register content project: {error}; recovery failed: {restore}"),
-        });
-    }
-
-    let validation = (|| {
+    replace_workspace_manifest(
+        &workspace_manifest,
+        &original,
+        &updated,
+        "content project registration",
+        || {
         WorkspaceManifest::load(paths)?;
         vapor_core::VaporWorkspace::load(&source_root).map_err(|error| error.to_string())?;
         let catalog = discover(paths)?;
@@ -1837,17 +1813,128 @@ pub fn adopt_source_project(paths: &EnvironmentPaths, project_path: &Path) -> Re
             return Err(format!("adopted content project {id} is not visible after registration"));
         }
         Ok(())
-    })();
-    if let Err(error) = validation {
-        let _ = fs::remove_file(&workspace_manifest);
-        return Err(match fs::rename(&backup, &workspace_manifest) {
-            Ok(()) => format!("content project registration failed validation: {error}; original Workspace manifest restored"),
-            Err(restore) => format!("content project registration failed validation: {error}; recovery failed: {restore}"),
+        },
+    )?;
+    Ok(format!("Registered {kind} content {id} from {}.", project_path.display()))
+}
+
+/// Remove a content project from Vapor discovery without touching its files or Cargo membership.
+pub fn unregister_source_project(paths: &EnvironmentPaths, id: &str) -> Result<String, String> {
+    let workspace = WorkspaceManifest::load(paths)?;
+    if workspace.kind() != crate::workspace::SourceRootKind::Workspace {
+        return Err("content projects can only be unregistered from a Vapor Workspace".to_owned());
+    }
+    let project = workspace.projects().iter().find(|project| project.id() == id)
+        .ok_or_else(|| format!("content project is not registered in this Workspace: {id}"))?;
+    let project_path = project.path().to_path_buf();
+    let project_kind = project.kind().to_string();
+    let source_root = fs::canonicalize(paths.source().root())
+        .map_err(io("resolve source workspace", paths.source().root()))?;
+    let workspace_manifest = source_root.join(manifest::WORKSPACE_FILE_NAME);
+    let metadata = fs::symlink_metadata(&workspace_manifest)
+        .map_err(io("inspect Workspace manifest", &workspace_manifest))?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(format!("Workspace manifest must be a regular non-symlink file: {}", workspace_manifest.display()));
+    }
+    let original = fs::read_to_string(&workspace_manifest)
+        .map_err(io("read Workspace manifest", &workspace_manifest))?;
+    let mut document = original.parse::<toml_edit::DocumentMut>()
+        .map_err(|error| format!("Workspace manifest is not valid TOML: {error}"))?;
+    let workspace_table = document.get_mut("workspace").and_then(toml_edit::Item::as_table_mut)
+        .ok_or_else(|| "Workspace manifest has no [workspace] table".to_owned())?;
+    let projects_item = workspace_table.get("projects")
+        .ok_or_else(|| "Workspace has no registered content projects".to_owned())?;
+    let projects = projects_item.as_array_of_tables()
+        .ok_or_else(|| "workspace.projects must be an array of tables".to_owned())?;
+    let mut retained = toml_edit::ArrayOfTables::new();
+    let mut removed = 0usize;
+    let mut retained_count = 0usize;
+    for entry in projects.iter() {
+        let matches = entry.get("path").and_then(toml_edit::Item::as_str)
+            .is_some_and(|path| Path::new(path) == project_path.as_path());
+        if matches {
+            removed += 1;
+        } else {
+            retained.push(entry.clone());
+            retained_count += 1;
+        }
+    }
+    if removed != 1 {
+        return Err(format!("expected one Workspace registration for {id}, found {removed}; no change made"));
+    }
+    if retained_count == 0 {
+        workspace_table.remove("projects");
+    } else {
+        workspace_table.insert("projects", toml_edit::Item::ArrayOfTables(retained));
+    }
+    let updated = document.to_string();
+    replace_workspace_manifest(
+        &workspace_manifest,
+        &original,
+        &updated,
+        "content project unregistration",
+        || {
+            WorkspaceManifest::load(paths)?;
+            vapor_core::VaporWorkspace::load(&source_root).map_err(|error| error.to_string())?;
+            let catalog = discover(paths)?;
+            if catalog.artifacts().iter().any(|artifact| artifact.id() == id) {
+                return Err(format!("content project {id} remains visible after unregistration"));
+            }
+            Ok(())
+        },
+    )?;
+    Ok(format!(
+        "Unregistered {project_kind} content {id} from the Vapor project registry. Its files and Cargo membership were left unchanged."
+    ))
+}
+
+fn replace_workspace_manifest<T>(
+    manifest_path: &Path,
+    expected_source: &str,
+    updated_source: &str,
+    action: &str,
+    validate: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let lock_path = manifest_path.with_file_name(".Workspace.vapor-project.lock");
+    let lock_file = fs::OpenOptions::new().write(true).create_new(true).open(&lock_path)
+        .map_err(|error| format!("cannot acquire Workspace edit lock '{}': {error}", lock_path.display()))?;
+    let _lock = SourceManifestEditLock { path: lock_path, file: Some(lock_file) };
+    let current = fs::read_to_string(manifest_path)
+        .map_err(io("re-read Workspace manifest", manifest_path))?;
+    if current != expected_source {
+        return Err("Workspace manifest changed while the project registry edit was being prepared; retry the action".to_owned());
+    }
+    let temporary = source_manifest_temp_path(manifest_path);
+    if let Err(error) = write_source_manifest_temp(&temporary, updated_source, manifest_path) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    let backup = source_manifest_temp_path_with_suffix(manifest_path, "backup");
+    if let Err(error) = fs::rename(manifest_path, &backup) {
+        let _ = fs::remove_file(&temporary);
+        return Err(io("prepare Workspace manifest replacement", manifest_path)(error));
+    }
+    if let Err(error) = fs::rename(&temporary, manifest_path) {
+        let restore = fs::rename(&backup, manifest_path);
+        let _ = fs::remove_file(&temporary);
+        return Err(match restore {
+            Ok(()) => io("replace Workspace manifest", manifest_path)(error),
+            Err(restore) => format!("failed to apply {action}: {error}; recovery failed: {restore}"),
         });
     }
-    let _ = fs::remove_file(&backup);
-    drop(lock);
-    Ok(format!("Registered {kind} content {id} from {}.", project_path.display()))
+    match validate() {
+        Ok(result) => {
+            let _ = fs::remove_file(&backup);
+            Ok(result)
+        }
+        Err(error) => {
+            let _ = fs::remove_file(manifest_path);
+            Err(match fs::rename(&backup, manifest_path) {
+                Ok(()) => format!("{action} failed validation: {error}; original Workspace manifest restored"),
+                Err(restore) => format!("{action} failed validation: {error}; recovery failed: {restore}"),
+            })
+        }
+    }
 }
 
 /// Load the editable dependency graph for a locally authored content project.

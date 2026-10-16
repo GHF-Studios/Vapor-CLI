@@ -44,6 +44,9 @@ The child role manifest, for example `Engine.vapor.toml` or
 `Packagepack.vapor.toml`, owns the content role and metadata; the workspace
 registration owns membership in the workspace. Vapor does not recursively guess
 content membership from every nested manifest it finds.
+Studio can unregister an existing project by removing its registry entry. This
+leaves the project files and Cargo membership untouched; the folder then appears
+in the unregistered-project scan and can be adopted again.
 
 When `content package` stages an artifact, Vapor writes a resolved deployed
 role-specific manifest into the artifact root and copies declared runtime
