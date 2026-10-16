@@ -129,7 +129,8 @@ pub(crate) fn installation_app_id(installation: &InstallationPaths) -> Result<u3
         })
 }
 
-/// Create a basic engine/game/packagepack content workspace.
+/// Create a basic engine/game/packagepack content workspace. Only the
+/// code-bearing Engine and Game become Cargo packages; Packagepack is metadata.
 pub(crate) fn init_basic_content(options: BasicContentInit) -> Result<InitReport, String> {
     validate_slug("organization", &options.organization)?;
     validate_slug("workspace name", &options.name)?;
@@ -159,7 +160,6 @@ pub(crate) fn init_basic_content(options: BasicContentInit) -> Result<InitReport
     let packagepack_id = format!("{workspace_id}/{packagepack}");
     let title = title_case(&options.name);
     let engine_crate = crate_name(&engine);
-    let game_crate = crate_name(&game);
 
     write(
         &options.path.join(manifest::WORKSPACE_FILE_NAME),
@@ -211,14 +211,6 @@ version = "0.1.0"
 dependencies = [
  "{engine}",
 ]
-
-[[package]]
-name = "{packagepack}"
-version = "0.1.0"
-dependencies = [
- "{engine}",
- "{game}",
-]
 "#
         ),
     )?;
@@ -229,6 +221,9 @@ dependencies = [
             r#"# {title}
 
 Basic Vapor content workspace.
+
+The Engine and Game contain Rust projects. The Packagepack is composition
+metadata only and is not a Cargo member.
 
 ## Local loop
 
@@ -376,28 +371,6 @@ change-note = "Initial Vapor content upload."
 "#,
             app_id = options.app_id,
             name = options.name,
-        ),
-    )?;
-    write_package_manifest(
-        &packagepack_root.join("Cargo.toml"),
-        &packagepack,
-        None,
-        &[
-            (&engine, &format!("../{engine}")),
-            (&game, &format!("../{game}")),
-        ],
-    )?;
-    write(
-        &packagepack_root.join("src/lib.rs"),
-        &format!(
-            r#"#![forbid(unsafe_code)]
-
-pub const CONTENT_ID: &str = "{packagepack_id}";
-
-pub fn composed_content() -> [&'static str; 2] {{
-    [{engine_crate}::CONTENT_ID, {game_crate}::CONTENT_ID]
-}}
-"#
         ),
     )?;
 
