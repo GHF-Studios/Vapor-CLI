@@ -25,6 +25,7 @@ use std::{
     collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
+    process::Command,
     sync::Arc,
 };
 use vapor_core::{
@@ -189,12 +190,50 @@ pub enum LaunchCommand {
 #[derive(Debug, Subcommand)]
 /// Vapor Client deployment operations.
 pub enum ClientCommand {
+    /// Launch the locally deployed Steam entrypoint without Steam.
+    Launch {
+        /// Entrypoint mode; defaults to the Studio home screen.
+        #[arg(value_enum, default_value = "studio")]
+        mode: ClientLaunchMode,
+        /// Arguments forwarded to the selected entrypoint mode after `--`.
+        #[arg(last = true, allow_hyphen_values = true)]
+        arguments: Vec<std::ffi::OsString>,
+    },
+
     /// Deploy the active Vapor Client workspace.
     Deploy {
         /// Deployment target.
         #[command(subcommand)]
         command: ClientDeployCommand,
     },
+}
+
+/// Modes accepted by the deployed Vapor Steam entrypoint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ClientLaunchMode {
+    /// Open the Vapor Studio home screen.
+    Studio,
+    /// Play the active profile composition.
+    Play,
+    /// Open the Vapor command shell.
+    Shell,
+    /// Open the installation/setup flow.
+    Installer,
+}
+
+fn client_launch_arguments(
+    mode: ClientLaunchMode,
+    arguments: Vec<std::ffi::OsString>,
+) -> Vec<std::ffi::OsString> {
+    let mode = match mode {
+        ClientLaunchMode::Studio => "studio",
+        ClientLaunchMode::Play => "play",
+        ClientLaunchMode::Shell => "shell",
+        ClientLaunchMode::Installer => "installer",
+    };
+    std::iter::once(std::ffi::OsString::from(mode))
+        .chain(arguments)
+        .collect()
 }
 
 #[derive(Debug, Subcommand)]
@@ -812,13 +851,18 @@ fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control
 }
 
 pub(super) fn execute_client(command: ClientCommand) -> Result<(), String> {
-    run_cli_operation("client", "deploy-local", OperationPhase::Building, |_context| {
-        execute_client_body(command)
-    })
+    let (action, phase) = match &command {
+        ClientCommand::Launch { .. } => ("launch-entrypoint", OperationPhase::Running),
+        ClientCommand::Deploy { .. } => ("deploy-local", OperationPhase::Building),
+    };
+    run_cli_operation("client", action, phase, |_context| execute_client_body(command))
 }
 
 fn execute_client_body(command: ClientCommand) -> Result<(), String> {
     match command {
+        ClientCommand::Launch { mode, arguments } => {
+            return launch_client_entrypoint(mode, arguments);
+        }
         ClientCommand::Deploy {
             command: ClientDeployCommand::Local,
         } => match deploy_client_locally().map_err(|error| error.to_string())? {
@@ -859,6 +903,35 @@ fn execute_launch(command: LaunchCommand, state: &ShellState) -> Result<(), Stri
         LaunchCommand::Default { account } => launch_default_composition(state, account.as_deref()),
         LaunchCommand::Selected => launch_selected_composition(state),
     }
+}
+
+fn launch_client_entrypoint(
+    mode: ClientLaunchMode,
+    arguments: Vec<std::ffi::OsString>,
+) -> Result<(), String> {
+    let installation = vapor_core::VaporInstallation::discover()
+        .map_err(|error| format!("could not locate the Vapor installation: {error}"))?;
+    let entrypoint = installation
+        .root
+        .join("bin")
+        .join(workflow::host_runtime_target())
+        .join(format!("vapor-entrypoint{}", std::env::consts::EXE_SUFFIX));
+    if !entrypoint.is_file() {
+        return Err(format!(
+            "local Steam entrypoint was not found at {}. Run `vapor client deploy local` first.",
+            entrypoint.display()
+        ));
+    }
+
+    let status = Command::new(&entrypoint)
+        .args(client_launch_arguments(mode, arguments))
+        .current_dir(&installation.root)
+        .status()
+        .map_err(|error| format!("could not launch {}: {error}", entrypoint.display()))?;
+    if !status.success() {
+        return Err(format!("Vapor entrypoint exited with {status}"));
+    }
+    Ok(())
 }
 
 fn launch_default_composition(state: &ShellState, account: Option<&str>) -> Result<(), String> {
@@ -2832,5 +2905,74 @@ fn script_command_allowed(command: &ShellCommand) -> bool {
 pub(crate) fn print_warnings(warnings: Vec<String>) {
     for warning in warnings {
         eprintln!("warning: {warning}");
+    }
+}
+
+#[cfg(test)]
+mod client_launch_tests {
+    use super::{ClientCommand, ClientLaunchMode, ShellCommand, client_launch_arguments};
+    use clap::Parser;
+    use std::ffi::OsString;
+
+    #[test]
+    fn client_launch_defaults_to_the_studio_entrypoint_mode() {
+        let parsed = ShellCommand::try_parse_from(["vapor", "client", "launch"]).unwrap();
+        assert!(matches!(
+            parsed,
+            ShellCommand::Client {
+                command: ClientCommand::Launch {
+                    mode: ClientLaunchMode::Studio,
+                    ..
+                }
+            }
+        ));
+    }
+
+    #[test]
+    fn client_launch_accepts_each_supported_entrypoint_mode() {
+        for (argument, expected) in [
+            ("studio", ClientLaunchMode::Studio),
+            ("play", ClientLaunchMode::Play),
+            ("shell", ClientLaunchMode::Shell),
+            ("installer", ClientLaunchMode::Installer),
+        ] {
+            let parsed = ShellCommand::try_parse_from(["vapor", "client", "launch", argument])
+                .unwrap();
+            assert!(matches!(
+                parsed,
+                ShellCommand::Client {
+                    command: ClientCommand::Launch { mode, .. }
+                } if mode == expected
+            ));
+        }
+    }
+
+    #[test]
+    fn client_launch_forwards_mode_and_gui_arguments_to_entrypoint() {
+        let parsed = ShellCommand::try_parse_from([
+            "vapor",
+            "client",
+            "launch",
+            "studio",
+            "--",
+            "--workspace",
+            "/tmp/loo-cast",
+        ])
+        .unwrap();
+        let ShellCommand::Client {
+            command: ClientCommand::Launch { mode, arguments },
+        } = parsed
+        else {
+            panic!("client launch should parse as an entrypoint launch");
+        };
+
+        assert_eq!(
+            client_launch_arguments(mode, arguments),
+            [
+                OsString::from("studio"),
+                OsString::from("--workspace"),
+                OsString::from("/tmp/loo-cast"),
+            ]
+        );
     }
 }

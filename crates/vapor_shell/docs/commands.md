@@ -28,6 +28,28 @@ bin/x86_64-unknown-linux-gnu/vapor-entrypoint play --send-diagnostics
 bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe play --send-diagnostics
 ```
 
+## Client entrypoint
+
+### `client launch [studio|play|shell|installer] [-- ARGUMENTS...]`
+
+Launch the locally deployed `vapor-entrypoint` using the host platform's
+runtime binary directory. This follows the same dispatch path as Steam without
+requiring Steam to launch it. The default mode is `studio`; arguments after
+`--` are forwarded through the entrypoint to the selected mode:
+
+```text
+vapor client launch                         # Studio home
+vapor client launch studio -- --workspace /path/to/workspace
+vapor client launch play                    # the active profile
+vapor client launch shell
+vapor client launch installer
+```
+
+The installed CLI resolves its app instance from its own location. When
+running a source-built CLI from the managed build cache, set `VAPOR_HOME` to the
+local app-instance root first. If the entrypoint is missing, run `client deploy
+local` from the source workspace.
+
 ## Launch
 
 ### `launch default [--account ACCOUNT]`

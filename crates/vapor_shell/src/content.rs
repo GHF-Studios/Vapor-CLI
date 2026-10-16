@@ -306,14 +306,20 @@ fn default_reference_relationship() -> String {
 /// One editable edge in a source content dependency graph.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompositionLink {
+    /// ID of the referenced content artifact.
     pub id: String,
+    /// Role or relation assigned to the reference.
     pub relationship: String,
+    /// Whether the composition remains valid when the reference is unavailable.
     #[serde(default)]
     pub optional: bool,
+    /// Version constraint declared for the referenced artifact.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
+    /// Steam Workshop item ID used to acquire the artifact.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workshop_id: Option<String>,
+    /// Author-provided explanation for this relationship.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
@@ -321,35 +327,54 @@ pub struct CompositionLink {
 /// Source snapshot used by Studio's composition editor and optimistic save.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceComposition {
+    /// ID of the source content artifact.
     pub id: String,
+    /// Authored artifact version, when present.
     pub version: Option<String>,
+    /// Content kind declared by the manifest.
     #[serde(default)]
     pub kind: String,
+    /// Path to the source manifest.
     pub manifest: PathBuf,
+    /// Exact manifest text used for optimistic concurrency checks.
     pub source: String,
+    /// Editable dependency, conflict, and composition links.
     pub links: Vec<CompositionLink>,
 }
 
 /// Snapshot of a source content manifest for structured Workshop metadata editing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceWorkshopMetadata {
+    /// ID of the source content artifact.
     pub id: String,
+    /// Authored artifact version, when present.
     pub version: Option<String>,
+    /// Content kind declared by the manifest.
     pub kind: String,
+    /// Path to the source manifest.
     pub manifest: PathBuf,
+    /// Exact manifest text used for optimistic concurrency checks.
     pub source: String,
+    /// Editable Steam Workshop policy values.
     pub policy: WorkshopPolicyDraft,
 }
 
 /// Snapshot of runtime executable and library declarations in a source manifest.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceRuntimeOutputs {
+    /// ID of the source content artifact.
     pub id: String,
+    /// Authored artifact version, when present.
     pub version: Option<String>,
+    /// Content kind declared by the manifest.
     pub kind: String,
+    /// Path to the source manifest.
     pub manifest: PathBuf,
+    /// Exact manifest text used for optimistic concurrency checks.
     pub source: String,
+    /// Declared executable names.
     pub binaries: Vec<String>,
+    /// Declared shared-library names.
     pub libraries: Vec<String>,
 }
 
@@ -422,12 +447,19 @@ pub struct WorkshopPolicy {
 /// Optional Workshop publication metadata supplied when scaffolding content.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WorkshopPolicyDraft {
+    /// Steam AppID that owns the target Workshop item.
     pub app_id: Option<u32>,
+    /// Existing Workshop item ID, when updating an item.
     pub published_file_id: Option<String>,
+    /// Requested Workshop visibility.
     pub visibility: Option<String>,
+    /// Workshop item title.
     pub title: Option<String>,
+    /// Workshop item description.
     pub description: Option<String>,
+    /// Workshop tags applied to the item.
     pub tags: Vec<String>,
+    /// Note shown with the next Workshop update.
     pub change_note: Option<String>,
 }
 
@@ -1317,8 +1349,11 @@ impl WorkshopOperationReport {
 /// One valid, unregistered content project that may be explicitly adopted.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceProjectCandidate {
+    /// Root directory of the unregistered content project.
     pub path: PathBuf,
+    /// ID declared by the project's content manifest.
     pub id: String,
+    /// Content kind declared by the project.
     pub kind: ContentKind,
 }
 
@@ -1326,7 +1361,9 @@ pub struct SourceProjectCandidate {
 /// returned as diagnostics and never enter the content catalog.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SourceProjectScan {
+    /// Valid unregistered projects available for explicit adoption.
     pub candidates: Vec<SourceProjectCandidate>,
+    /// Reasons project folders were excluded from the candidate list.
     pub diagnostics: Vec<String>,
 }
 
@@ -2371,7 +2408,13 @@ pub fn save_source_workshop_metadata(
     let steam = steam_item
         .as_table_mut()
         .ok_or_else(|| format!("[{role}.steam] must be a table"))?;
-    set_optional_toml_value(steam, "app-id", policy.app_id.map(toml_edit::value));
+    set_optional_toml_value(
+        steam,
+        "app-id",
+        policy
+            .app_id
+            .map(|app_id| toml_edit::value(i64::from(app_id))),
+    );
     set_optional_toml_value(steam, "published-file-id", policy.published_file_id.as_deref().map(toml_edit::value));
     set_optional_toml_value(steam, "visibility", policy.visibility.as_deref().map(toml_edit::value));
     set_optional_toml_value(steam, "title", policy.title.as_deref().map(toml_edit::value));
@@ -3873,13 +3916,7 @@ fn create_workshop_item_for_targets_checked(
     }
 
     let package = package_for_targets(paths, artifact.id(), false, target_triples)?;
-    let mut reviewed_stage = None;
-    let mut package_fingerprint = format!(
-        "{}:{}",
-        package.fingerprint().algorithm(),
-        package.fingerprint().hash()
-    );
-    let upload_root = if let Some(expected) = expected_fingerprint {
+    let (upload_root, _reviewed_stage, package_fingerprint) = if let Some(expected) = expected_fingerprint {
         let staged = TemporaryDirectory::new("vapor-workshop-reviewed", artifact.id())?;
         copy_tree(package.root(), staged.path(), package.root(), &[])?;
         let fingerprint = fingerprint_tree(staged.path())?;
@@ -3890,15 +3927,15 @@ fn create_workshop_item_for_targets_checked(
                 artifact.id()
             ));
         }
-        package_fingerprint = fingerprint;
-        reviewed_stage = Some(staged);
-        reviewed_stage
-            .as_ref()
-            .expect("reviewed staging directory was retained")
-            .path()
-            .to_path_buf()
+        let upload_root = staged.path().to_path_buf();
+        (upload_root, Some(staged), fingerprint)
     } else {
-        package.root().to_path_buf()
+        let fingerprint = format!(
+            "{}:{}",
+            package.fingerprint().algorithm(),
+            package.fingerprint().hash()
+        );
+        (package.root().to_path_buf(), None, fingerprint)
     };
     let script = write_workshop_script(paths, artifact, &upload_root, None, dry_run)?;
     if dry_run {
