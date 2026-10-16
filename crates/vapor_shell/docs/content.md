@@ -182,6 +182,12 @@ content deploy ghf-studios/loo-cast/loo-cast-packagepack --select --host-only
 Scripts cannot perform real Workshop create, publish, or delete operations.
 Those authority-changing steps must be typed manually in the interactive shell.
 
+Studio-reviewed uploads use a stricter operation: Studio supplies the reviewed
+package fingerprint, Vapor stages the payload again, verifies the fingerprint,
+copies the verified package to operation-owned temporary storage, and uploads
+that exact copy. Source changes between review and upload stop the operation;
+the receipt records the payload fingerprint.
+
 ## Corruption and repair
 
 `content verify` recomputes fingerprints from installed artifact roots and

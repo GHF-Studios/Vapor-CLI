@@ -187,7 +187,10 @@ impl CargoProject {
 
     /// Runtime support files promoted beside this project's binaries.
     pub fn libraries(&self, target: &str) -> &[String] {
-        self.libraries.get(target).map(Vec::as_slice).unwrap_or_default()
+        self.libraries
+            .get(target)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
     }
 }
 
@@ -355,7 +358,7 @@ fn discover_root_cargo_workspaces(root: &Path) -> Result<Vec<CargoProject>, Stri
             let libraries = if let Some(marker) = &marker {
                 workspace_libraries(marker)?
             } else {
-                Vec::new()
+                BTreeMap::new()
             };
 
             Ok(CargoProject {
@@ -664,19 +667,25 @@ mod tests {
     #[test]
     fn runtime_file_names_are_portable_basenames() {
         let marker = Path::new("Workspace.vapor.toml");
-        assert!(validate_runtime_file_names(
-            &["libsteam_api.so".to_owned(), "steam_api64.dll".to_owned()],
-            marker,
-            "library"
-        )
-        .is_ok());
-        assert!(validate_runtime_file_names(&["../steam_api.so".to_owned()], marker, "library")
-            .is_err());
-        assert!(validate_runtime_file_names(
-            &["Steam_API.dll".to_owned(), "steam_api.dll".to_owned()],
-            marker,
-            "library"
-        )
-        .is_err());
+        assert!(
+            validate_runtime_file_names(
+                &["libsteam_api.so".to_owned(), "steam_api64.dll".to_owned()],
+                marker,
+                "library"
+            )
+            .is_ok()
+        );
+        assert!(
+            validate_runtime_file_names(&["../steam_api.so".to_owned()], marker, "library")
+                .is_err()
+        );
+        assert!(
+            validate_runtime_file_names(
+                &["Steam_API.dll".to_owned(), "steam_api.dll".to_owned()],
+                marker,
+                "library"
+            )
+            .is_err()
+        );
     }
 }

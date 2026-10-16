@@ -205,7 +205,11 @@ fn inspect_rust(toolchains: &Path, active_root: Option<&Path>) -> (Option<PathBu
         .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
         .map(|entry| entry.path().join("bin"))
         .collect::<Vec<_>>();
-    candidates.sort();
+    candidates.sort_by(|left, right| {
+        let left_name = left.parent().and_then(Path::file_name).unwrap_or_default();
+        let right_name = right.parent().and_then(Path::file_name).unwrap_or_default();
+        toolchain_version_key(right_name).cmp(&toolchain_version_key(left_name))
+    });
     for bin in &candidates {
         let missing = required
             .iter()
@@ -226,6 +230,16 @@ fn inspect_rust(toolchains: &Path, active_root: Option<&Path>) -> (Option<PathBu
         candidates.into_iter().next(),
         required.iter().map(|name| (*name).to_owned()).collect(),
     )
+}
+
+fn toolchain_version_key(name: &std::ffi::OsStr) -> Vec<u32> {
+    name.to_string_lossy()
+        .split('-')
+        .next()
+        .unwrap_or_default()
+        .split('.')
+        .map(|part| part.parse::<u32>().unwrap_or(0))
+        .collect()
 }
 
 fn format_missing_selected(status: &AppToolStatus, requirements: &[AppToolRequirement]) -> String {
@@ -290,4 +304,18 @@ fn is_healthy_executable(path: &Path, root: &Path) -> bool {
             .env("RUSTUP_HOME", root.join("rustup-home"))
             .output()
             .is_ok_and(|output| output.status.success())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::toolchain_version_key;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn selects_newer_app_local_toolchain_before_older_version() {
+        assert!(
+            toolchain_version_key(OsStr::new("1.97.0-x86_64-unknown-linux-gnu"))
+                > toolchain_version_key(OsStr::new("1.83.0-x86_64-unknown-linux-gnu"))
+        );
+    }
 }

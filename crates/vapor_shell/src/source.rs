@@ -566,13 +566,17 @@ pub(crate) fn scaffold_content_project(
     version: &str,
     kind: ContentKind,
 ) -> Result<GeneratedContentProject, String> {
-    let crate_name = format!("vapor_{}", content_id.replace('/', "_").replace('-', "_"));
+    let crate_name = format!("vapor_{}", content_id.replace(['/', '-'], "_"));
     let output = match kind {
         ContentKind::Engine => Some(GeneratedOutputKind::Binary),
-        ContentKind::Game | ContentKind::EngineMod | ContentKind::GameMod | ContentKind::ExtensionMod => {
-            Some(GeneratedOutputKind::Library)
-        }
-        ContentKind::Packagepack | ContentKind::Enginepack | ContentKind::Gamepack | ContentKind::Modpack => None,
+        ContentKind::Game
+        | ContentKind::EngineMod
+        | ContentKind::GameMod
+        | ContentKind::ExtensionMod => Some(GeneratedOutputKind::Library),
+        ContentKind::Packagepack
+        | ContentKind::Enginepack
+        | ContentKind::Gamepack
+        | ContentKind::Modpack => None,
     };
     let mut cargo = format!(
         "[package]\nname = \"{crate_name}\"\nversion = \"{version}\"\nedition = \"2024\"\n"
@@ -588,9 +592,7 @@ pub(crate) fn scaffold_content_project(
         )?,
         Some(GeneratedOutputKind::Library) | None => write(
             &root.join("src/lib.rs"),
-            &format!(
-                "#![forbid(unsafe_code)]\n\npub const CONTENT_ID: &str = \"{content_id}\";\n"
-            ),
+            &format!("#![forbid(unsafe_code)]\n\npub const CONTENT_ID: &str = \"{content_id}\";\n"),
         )?,
     }
     Ok(GeneratedContentProject { crate_name, output })

@@ -144,15 +144,13 @@ impl ContentCatalog {
 
     /// Find an artifact by full ID, local name, or published Workshop ID.
     pub fn find(&self, selector: &str) -> Option<&ContentArtifact> {
-        if let Some((id, version)) = selector.rsplit_once('@') {
-            if !id.is_empty() && !version.is_empty() {
-                if let Some(exact) = self.artifacts.iter().find(|artifact| {
-                    artifact.id == id && artifact.version.as_deref() == Some(version)
-                }) {
-                    return Some(exact);
-                }
-                return None;
-            }
+        if let Some((id, version)) = selector
+            .rsplit_once('@')
+            .filter(|(id, version)| !id.is_empty() && !version.is_empty())
+        {
+            return self.artifacts.iter().find(|artifact| {
+                artifact.id == id && artifact.version.as_deref() == Some(version)
+            });
         }
         self.artifacts.iter().find(|artifact| {
             artifact.id == selector
@@ -170,12 +168,24 @@ impl ContentCatalog {
         id: &str,
         requirement: Option<&semver::VersionReq>,
     ) -> Option<&ContentArtifact> {
-        let mut matches = self.artifacts.iter().filter(|artifact| artifact.id == id)
-            .filter_map(|artifact| artifact.version().and_then(|version| {
-                semver::Version::parse(version).ok().map(|version| (artifact, version))
-            }))
-            .filter(|(_, version)| requirement.is_none_or(|requirement| requirement.matches(version)));
-        matches.by_ref().max_by(|(_, left), (_, right)| left.cmp(right)).map(|(artifact, _)| artifact)
+        let mut matches = self
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.id == id)
+            .filter_map(|artifact| {
+                artifact.version().and_then(|version| {
+                    semver::Version::parse(version)
+                        .ok()
+                        .map(|version| (artifact, version))
+                })
+            })
+            .filter(|(_, version)| {
+                requirement.is_none_or(|requirement| requirement.matches(version))
+            });
+        matches
+            .by_ref()
+            .max_by(|(_, left), (_, right)| left.cmp(right))
+            .map(|(artifact, _)| artifact)
             .or_else(|| requirement.is_none().then(|| self.by_id(id)).flatten())
     }
 
@@ -292,6 +302,45 @@ pub struct ContentReference {
 fn default_reference_relationship() -> String {
     "dependency".to_owned()
 }
+
+/// One editable edge in a source Packagepack composition.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompositionLink {
+    pub id: String,
+    pub relationship: String,
+    #[serde(default)]
+    pub optional: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workshop_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// Source snapshot used by Studio's composition editor and optimistic save.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceComposition {
+    pub id: String,
+    pub version: Option<String>,
+    pub manifest: PathBuf,
+    pub source: String,
+    pub links: Vec<CompositionLink>,
+}
+
+impl From<&ContentReference> for CompositionLink {
+    fn from(reference: &ContentReference) -> Self {
+        Self {
+            id: reference.id.clone(),
+            relationship: reference.relationship.clone(),
+            optional: reference.optional,
+            version: reference.version.clone(),
+            workshop_id: reference.workshop_id.clone(),
+            reason: reference.reason.clone(),
+        }
+    }
+}
+
 
 impl ContentReference {
     /// Referenced artifact ID.
@@ -616,16 +665,24 @@ pub struct InstalledPackagepackGraph {
 
 impl InstalledPackagepackGraph {
     /// Exact installed Packagepack root.
-    pub fn root(&self) -> &InstalledArtifactSnapshot { &self.root }
+    pub fn root(&self) -> &InstalledArtifactSnapshot {
+        &self.root
+    }
 
     /// Effective installed Engine.
-    pub fn engine(&self) -> &InstalledArtifactSnapshot { &self.engine }
+    pub fn engine(&self) -> &InstalledArtifactSnapshot {
+        &self.engine
+    }
 
     /// Optional installed Game.
-    pub fn game(&self) -> Option<&InstalledArtifactSnapshot> { self.game.as_ref() }
+    pub fn game(&self) -> Option<&InstalledArtifactSnapshot> {
+        self.game.as_ref()
+    }
 
     /// Required resolved nodes, including root, Engine, Game, and dependencies.
-    pub fn nodes(&self) -> &[InstalledArtifactSnapshot] { &self.nodes }
+    pub fn nodes(&self) -> &[InstalledArtifactSnapshot] {
+        &self.nodes
+    }
 }
 
 /// Fully resolved, verified plan for launching one installed composition.
@@ -644,31 +701,49 @@ pub struct PackagepackLaunchPlan {
 
 impl PackagepackLaunchPlan {
     /// Selected Packagepack content ID.
-    pub fn packagepack_id(&self) -> &str { &self.packagepack_id }
+    pub fn packagepack_id(&self) -> &str {
+        &self.packagepack_id
+    }
 
     /// Installed Packagepack root.
-    pub fn packagepack_root(&self) -> &Path { &self.packagepack_root }
+    pub fn packagepack_root(&self) -> &Path {
+        &self.packagepack_root
+    }
 
     /// Required Engine content ID.
-    pub fn engine_id(&self) -> &str { &self.engine_id }
+    pub fn engine_id(&self) -> &str {
+        &self.engine_id
+    }
 
     /// Installed Engine root.
-    pub fn engine_root(&self) -> &Path { &self.engine_root }
+    pub fn engine_root(&self) -> &Path {
+        &self.engine_root
+    }
 
     /// Optional Game content ID.
-    pub fn game_id(&self) -> Option<&str> { self.game_id.as_deref() }
+    pub fn game_id(&self) -> Option<&str> {
+        self.game_id.as_deref()
+    }
 
     /// Optional installed Game root.
-    pub fn game_root(&self) -> Option<&Path> { self.game_root.as_deref() }
+    pub fn game_root(&self) -> Option<&Path> {
+        self.game_root.as_deref()
+    }
 
     /// Host runtime target selected for the Engine.
-    pub fn runtime_target(&self) -> &str { &self.runtime_target }
+    pub fn runtime_target(&self) -> &str {
+        &self.runtime_target
+    }
 
     /// Verified Engine binary path.
-    pub fn binary(&self) -> &Path { &self.binary }
+    pub fn binary(&self) -> &Path {
+        &self.binary
+    }
 
     /// Content IDs whose installed closure was checked.
-    pub fn verified_ids(&self) -> &[String] { &self.verified_ids }
+    pub fn verified_ids(&self) -> &[String] {
+        &self.verified_ids
+    }
 }
 
 /// Resolve and verify an installed Packagepack without changing global selection.
@@ -690,10 +765,15 @@ fn inspect_installed_packagepack(
     index: &ContentIndex,
     packagepack_id: &str,
 ) -> Result<InstalledPackagepackGraph, String> {
-    let packagepack = index.installed.get(packagepack_id)
+    let packagepack = index
+        .installed
+        .get(packagepack_id)
         .ok_or_else(|| format!("Packagepack is not installed: {packagepack_id}"))?;
     if packagepack.kind != ContentKind::Packagepack.to_string() {
-        return Err(format!("{} is {}, not a Packagepack", packagepack_id, packagepack.kind));
+        return Err(format!(
+            "{} is {}, not a Packagepack",
+            packagepack_id, packagepack.kind
+        ));
     }
     let mut visiting = BTreeSet::new();
     let mut verified = BTreeSet::new();
@@ -708,11 +788,24 @@ fn inspect_installed_packagepack(
         "engine",
         ContentKind::Enginepack,
         packagepack_id,
-    )?.ok_or_else(|| format!("Packagepack '{}' has no required Engine or Enginepack dependency", packagepack_id))?;
-    let engine = index.installed.get(&engine_id)
-        .ok_or_else(|| format!("Packagepack '{}' requires missing Engine '{}'", packagepack_id, engine_id))?;
+    )?
+    .ok_or_else(|| {
+        format!(
+            "Packagepack '{}' has no required Engine or Enginepack dependency",
+            packagepack_id
+        )
+    })?;
+    let engine = index.installed.get(&engine_id).ok_or_else(|| {
+        format!(
+            "Packagepack '{}' requires missing Engine '{}'",
+            packagepack_id, engine_id
+        )
+    })?;
     if engine.kind != ContentKind::Engine.to_string() {
-        return Err(format!("Packagepack '{}' resolves Engine '{}' to content kind {}", packagepack_id, engine_id, engine.kind));
+        return Err(format!(
+            "Packagepack '{}' resolves Engine '{}' to content kind {}",
+            packagepack_id, engine_id, engine.kind
+        ));
     }
     let game_id = resolve_composed_role(
         index,
@@ -723,16 +816,29 @@ fn inspect_installed_packagepack(
         ContentKind::Gamepack,
         packagepack_id,
     )?;
-    let game = game_id.as_ref().map(|id| {
-        let game = index.installed.get(id)
-            .ok_or_else(|| format!("Packagepack '{}' requires missing Game '{}'", packagepack_id, id))?;
-        if game.kind != ContentKind::Game.to_string() {
-            return Err(format!("Packagepack '{}' resolves Game '{}' to content kind {}", packagepack_id, id, game.kind));
-        }
-        Ok(installed_snapshot_from_record(game))
-    }).transpose()?;
-    let nodes = verified.iter().filter_map(|id| index.installed.get(id))
-        .map(installed_snapshot_from_record).collect();
+    let game = game_id
+        .as_ref()
+        .map(|id| {
+            let game = index.installed.get(id).ok_or_else(|| {
+                format!(
+                    "Packagepack '{}' requires missing Game '{}'",
+                    packagepack_id, id
+                )
+            })?;
+            if game.kind != ContentKind::Game.to_string() {
+                return Err(format!(
+                    "Packagepack '{}' resolves Game '{}' to content kind {}",
+                    packagepack_id, id, game.kind
+                ));
+            }
+            Ok(installed_snapshot_from_record(game))
+        })
+        .transpose()?;
+    let nodes = verified
+        .iter()
+        .filter_map(|id| index.installed.get(id))
+        .map(installed_snapshot_from_record)
+        .collect();
     Ok(InstalledPackagepackGraph {
         root: installed_snapshot_from_record(packagepack),
         engine: installed_snapshot_from_record(engine),
@@ -758,11 +864,21 @@ pub fn prepare_packagepack_launch(
         packagepack_root: graph.root.installed_root().to_path_buf(),
         engine_id: graph.engine.artifact_id().to_owned(),
         engine_root: graph.engine.installed_root().to_path_buf(),
-        game_id: graph.game.as_ref().map(|game| game.artifact_id().to_owned()),
-        game_root: graph.game.as_ref().map(|game| game.installed_root().to_path_buf()),
+        game_id: graph
+            .game
+            .as_ref()
+            .map(|game| game.artifact_id().to_owned()),
+        game_root: graph
+            .game
+            .as_ref()
+            .map(|game| game.installed_root().to_path_buf()),
         runtime_target,
         binary,
-        verified_ids: graph.nodes.iter().map(|node| node.artifact_id().to_owned()).collect(),
+        verified_ids: graph
+            .nodes
+            .iter()
+            .map(|node| node.artifact_id().to_owned())
+            .collect(),
     })
 }
 
@@ -787,14 +903,20 @@ pub fn run_packagepack_launch(
         .env("VAPOR_RUNTIME_TARGET", &plan.runtime_target)
         .args(arguments);
     if let (Some(game_id), Some(game_root)) = (&plan.game_id, &plan.game_root) {
-        command.env("VAPOR_GAME_ID", game_id).env("VAPOR_GAME_ROOT", game_root);
+        command
+            .env("VAPOR_GAME_ID", game_id)
+            .env("VAPOR_GAME_ROOT", game_root);
     }
-    let status = command.status()
+    let status = command
+        .status()
         .map_err(|error| format!("failed to launch '{}': {error}", plan.binary.display()))?;
     if status.success() {
         Ok(())
     } else {
-        Err(format!("engine content {} exited with {status}", plan.engine_id))
+        Err(format!(
+            "engine content {} exited with {status}",
+            plan.engine_id
+        ))
     }
 }
 
@@ -804,49 +926,88 @@ fn verify_launch_closure(
     visiting: &mut BTreeSet<String>,
     verified: &mut BTreeSet<String>,
 ) -> Result<(), String> {
-    if verified.contains(artifact_id) { return Ok(()); }
+    if verified.contains(artifact_id) {
+        return Ok(());
+    }
     if !visiting.insert(artifact_id.to_owned()) {
-        return Err(format!("installed content dependency cycle includes {artifact_id}"));
+        return Err(format!(
+            "installed content dependency cycle includes {artifact_id}"
+        ));
     }
     let result = (|| {
-        let record = index.installed.get(artifact_id)
+        let record = index
+            .installed
+            .get(artifact_id)
             .ok_or_else(|| format!("required content is not installed: {artifact_id}"))?;
         if !record.enabled {
             return Err(format!("required content is disabled: {artifact_id}"));
         }
         let report = verify_one(index, artifact_id);
         if !report.ok() {
-            return Err(format!("installed content needs repair: {artifact_id}: {}", report.detail()));
+            return Err(format!(
+                "installed content needs repair: {artifact_id}: {}",
+                report.detail()
+            ));
         }
         for conflict in &record.conflicts {
-            if index.installed.get(conflict.id()).is_some_and(|item| item.enabled) {
-                return Err(format!("{artifact_id} conflicts with installed content '{}'", conflict.id()));
+            if index
+                .installed
+                .get(conflict.id())
+                .is_some_and(|item| item.enabled)
+            {
+                return Err(format!(
+                    "{artifact_id} conflicts with installed content '{}'",
+                    conflict.id()
+                ));
             }
         }
         for dependency in &record.dependencies {
             if dependency.optional() && !index.installed.contains_key(dependency.id()) {
                 continue;
             }
-            let requirement = dependency.version()
+            let requirement = dependency
+                .version()
                 .map(semver::VersionReq::parse)
                 .transpose()
-                .map_err(|error| format!("{artifact_id} has invalid version requirement for {}: {error}", dependency.id()))?;
-            let child = index.installed.get(dependency.id())
-                .ok_or_else(|| format!("{artifact_id} requires missing {} '{}'", dependency.relationship(), dependency.id()))?;
+                .map_err(|error| {
+                    format!(
+                        "{artifact_id} has invalid version requirement for {}: {error}",
+                        dependency.id()
+                    )
+                })?;
+            let child = index.installed.get(dependency.id()).ok_or_else(|| {
+                format!(
+                    "{artifact_id} requires missing {} '{}'",
+                    dependency.relationship(),
+                    dependency.id()
+                )
+            })?;
             if !version_satisfies(child.version.as_deref(), requirement.as_ref()) {
-                return Err(format!("{artifact_id} requires {} '{}' at {}, but installed version is {}", dependency.relationship(), dependency.id(), dependency.version().unwrap_or("any version"), child.version.as_deref().unwrap_or("unversioned")));
+                return Err(format!(
+                    "{artifact_id} requires {} '{}' at {}, but installed version is {}",
+                    dependency.relationship(),
+                    dependency.id(),
+                    dependency.version().unwrap_or("any version"),
+                    child.version.as_deref().unwrap_or("unversioned")
+                ));
             }
             verify_launch_closure(index, dependency.id(), visiting, verified)?;
         }
         Ok(())
     })();
     visiting.remove(artifact_id);
-    if result.is_ok() { verified.insert(artifact_id.to_owned()); }
+    if result.is_ok() {
+        verified.insert(artifact_id.to_owned());
+    }
     result
 }
 
 fn launch_dependencies(packagepack_root: &Path) -> Result<Vec<LaunchReference>, String> {
-    launch_role_dependencies(packagepack_root, manifest::PACKAGEPACK_FILE_NAME, "packagepack")
+    launch_role_dependencies(
+        packagepack_root,
+        manifest::PACKAGEPACK_FILE_NAME,
+        "packagepack",
+    )
 }
 
 fn launch_role_dependencies(
@@ -864,7 +1025,13 @@ fn launch_role_dependencies(
         "enginepack" => parsed.enginepack,
         "gamepack" => parsed.gamepack,
         _ => None,
-    }.ok_or_else(|| format!("selected content manifest '{}' has no [{role}] section", manifest.display()))?;
+    }
+    .ok_or_else(|| {
+        format!(
+            "selected content manifest '{}' has no [{role}] section",
+            manifest.display()
+        )
+    })?;
     Ok(content.dependencies)
 }
 
@@ -877,26 +1044,41 @@ fn resolve_composed_role(
     pack_kind: ContentKind,
     packagepack_id: &str,
 ) -> Result<Option<String>, String> {
-    let matching_ids = |relationship: &str| dependencies.iter()
-        .filter(|dependency| dependency.relationship == relationship)
-        .map(|dependency| dependency.id.clone())
-        .collect::<Vec<_>>();
+    let matching_ids = |relationship: &str| {
+        dependencies
+            .iter()
+            .filter(|dependency| dependency.relationship == relationship)
+            .map(|dependency| dependency.id.clone())
+            .collect::<Vec<_>>()
+    };
     let direct_ids = matching_ids(direct_relationship);
     let pack_ids = matching_ids(pack_relationship);
     if direct_ids.len() > 1 || pack_ids.len() > 1 {
-        return Err(format!("Packagepack '{packagepack_id}' declares more than one {direct_relationship} or {pack_relationship}"));
+        return Err(format!(
+            "Packagepack '{packagepack_id}' declares more than one {direct_relationship} or {pack_relationship}"
+        ));
     }
     let direct = direct_ids.into_iter().next();
     let pack = pack_ids.into_iter().next();
     if direct.is_some() && pack.is_some() {
-        return Err(format!("Packagepack '{packagepack_id}' declares both {direct_relationship} and {pack_relationship}"));
+        return Err(format!(
+            "Packagepack '{packagepack_id}' declares both {direct_relationship} and {pack_relationship}"
+        ));
     }
-    if let Some(id) = direct { return Ok(Some(id)); }
-    let Some(pack_id) = pack else { return Ok(None); };
-    let record = index.installed.get(&pack_id)
-        .ok_or_else(|| format!("Packagepack '{packagepack_id}' requires missing {pack_relationship} '{pack_id}'"))?;
+    if let Some(id) = direct {
+        return Ok(Some(id));
+    }
+    let Some(pack_id) = pack else {
+        return Ok(None);
+    };
+    let record = index.installed.get(&pack_id).ok_or_else(|| {
+        format!("Packagepack '{packagepack_id}' requires missing {pack_relationship} '{pack_id}'")
+    })?;
     if record.kind != pack_kind.to_string() {
-        return Err(format!("Packagepack '{packagepack_id}' resolves {pack_relationship} '{pack_id}' to content kind {}", record.kind));
+        return Err(format!(
+            "Packagepack '{packagepack_id}' resolves {pack_relationship} '{pack_id}' to content kind {}",
+            record.kind
+        ));
     }
     let (manifest_name, role) = match pack_kind {
         ContentKind::Enginepack => (manifest::ENGINEPACK_FILE_NAME, "enginepack"),
@@ -910,8 +1092,12 @@ fn resolve_composed_role(
         .collect::<Vec<_>>();
     match members.as_slice() {
         [member] => Ok(Some(member.clone())),
-        [] => Err(format!("{pack_relationship} '{pack_id}' has no required {member_relationship} dependency")),
-        _ => Err(format!("{pack_relationship} '{pack_id}' has more than one {member_relationship} dependency")),
+        [] => Err(format!(
+            "{pack_relationship} '{pack_id}' has no required {member_relationship} dependency"
+        )),
+        _ => Err(format!(
+            "{pack_relationship} '{pack_id}' has more than one {member_relationship} dependency"
+        )),
     }
 }
 
@@ -921,20 +1107,49 @@ fn engine_launch_binary(engine_root: &Path, runtime_target: &str) -> Result<Path
         .map_err(|error| format!("failed to read '{}': {error}", manifest_path.display()))?;
     let parsed: LaunchManifest = toml::from_str(&source)
         .map_err(|error| format!("failed to parse '{}': {error}", manifest_path.display()))?;
-    let engine = parsed.engine.ok_or_else(|| format!("resolved engine manifest '{}' has no [engine] section", manifest_path.display()))?;
-    let runtime = engine.runtime.iter().find(|runtime| runtime.target == runtime_target)
-        .ok_or_else(|| format!("resolved engine '{}' has no runtime payload for {runtime_target}", manifest_path.display()))?;
-    let binary_name = runtime.binaries.first()
-        .ok_or_else(|| format!("resolved engine '{}' declares no runtime binary for {runtime_target}", manifest_path.display()))?;
+    let engine = parsed.engine.ok_or_else(|| {
+        format!(
+            "resolved engine manifest '{}' has no [engine] section",
+            manifest_path.display()
+        )
+    })?;
+    let runtime = engine
+        .runtime
+        .iter()
+        .find(|runtime| runtime.target == runtime_target)
+        .ok_or_else(|| {
+            format!(
+                "resolved engine '{}' has no runtime payload for {runtime_target}",
+                manifest_path.display()
+            )
+        })?;
+    let binary_name = runtime.binaries.first().ok_or_else(|| {
+        format!(
+            "resolved engine '{}' declares no runtime binary for {runtime_target}",
+            manifest_path.display()
+        )
+    })?;
     let mut components = Path::new(binary_name).components();
     if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
-        return Err(format!("engine runtime binary must be a file name, got '{binary_name}'"));
+        return Err(format!(
+            "engine runtime binary must be a file name, got '{binary_name}'"
+        ));
     }
-    let binary = engine_root.join("bin").join(runtime_target).join(binary_name);
-    let metadata = fs::symlink_metadata(&binary)
-        .map_err(|error| format!("resolved engine content binary is missing: {}: {error}", binary.display()))?;
+    let binary = engine_root
+        .join("bin")
+        .join(runtime_target)
+        .join(binary_name);
+    let metadata = fs::symlink_metadata(&binary).map_err(|error| {
+        format!(
+            "resolved engine content binary is missing: {}: {error}",
+            binary.display()
+        )
+    })?;
     if !metadata.file_type().is_file() {
-        return Err(format!("resolved engine content binary is not a regular file: {}", binary.display()));
+        return Err(format!(
+            "resolved engine content binary is not a regular file: {}",
+            binary.display()
+        ));
     }
     Ok(binary)
 }
@@ -972,7 +1187,9 @@ struct LaunchReference {
     relationship: String,
 }
 
-fn default_launch_relationship() -> String { "dependency".to_owned() }
+fn default_launch_relationship() -> String {
+    "dependency".to_owned()
+}
 
 /// Verification result for one installed artifact.
 #[derive(Debug, Clone)]
@@ -1128,22 +1345,34 @@ pub fn create_source_project(
         return Err("new content can only be added to a Vapor workspace".to_owned());
     }
     let prefix = format!("{}/", workspace.id());
-    let name = content_id.strip_prefix(&prefix)
+    let name = content_id
+        .strip_prefix(&prefix)
         .filter(|name| !name.is_empty() && !name.contains('/'))
-        .ok_or_else(|| format!("content ID must start with '{prefix}' and contain one local name"))?;
-    if !name.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_')) {
+        .ok_or_else(|| {
+            format!("content ID must start with '{prefix}' and contain one local name")
+        })?;
+    if !name.bytes().all(|byte| {
+        byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_')
+    }) {
         return Err("content name must use lowercase ASCII letters, digits, '-' or '_'".to_owned());
     }
     let version = semver::Version::parse(version)
         .map_err(|error| format!("invalid content version: {error}"))?;
-    if workspace.projects().iter().any(|project| project.id() == content_id) {
-        return Err(format!("content project is already registered: {content_id}"));
+    if workspace
+        .projects()
+        .iter()
+        .any(|project| project.id() == content_id)
+    {
+        return Err(format!(
+            "content project is already registered: {content_id}"
+        ));
     }
 
     let catalog = discover(paths)?;
     let mut children = Vec::new();
     for selector in dependency_selectors {
-        let child = catalog.find(selector)
+        let child = catalog
+            .find(selector)
             .ok_or_else(|| format!("selected content is no longer available: {selector}"))?;
         if !source_dependency_allowed(kind, child.kind()) {
             return Err(format!("{} cannot be included in a {kind}", child.kind()));
@@ -1172,9 +1401,15 @@ pub fn create_source_project(
     let content_directory = root.join("content");
     let created_content_directory = match fs::symlink_metadata(&content_directory) {
         Ok(metadata) if metadata.file_type().is_dir() => false,
-        Ok(_) => return Err(format!("{} is not a regular directory", content_directory.display())),
+        Ok(_) => {
+            return Err(format!(
+                "{} is not a regular directory",
+                content_directory.display()
+            ));
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            fs::create_dir(&content_directory).map_err(io("create workspace content directory", &content_directory))?;
+            fs::create_dir(&content_directory)
+                .map_err(io("create workspace content directory", &content_directory))?;
             true
         }
         Err(error) => return Err(format!("{}: {error}", content_directory.display())),
@@ -1182,31 +1417,56 @@ pub fn create_source_project(
     let content_root = match fs::canonicalize(&content_directory) {
         Ok(path) => path,
         Err(error) => {
-            if created_content_directory { let _ = fs::remove_dir(&content_directory); }
-            return Err(format!("failed to resolve workspace content directory '{}': {error}", content_directory.display()));
+            if created_content_directory {
+                let _ = fs::remove_dir(&content_directory);
+            }
+            return Err(format!(
+                "failed to resolve workspace content directory '{}': {error}",
+                content_directory.display()
+            ));
         }
     };
     if !content_root.starts_with(root) {
-        if created_content_directory { let _ = fs::remove_dir(&content_directory); }
-        return Err("workspace content directory resolves outside the selected workspace".to_owned());
+        if created_content_directory {
+            let _ = fs::remove_dir(&content_directory);
+        }
+        return Err(
+            "workspace content directory resolves outside the selected workspace".to_owned(),
+        );
     }
     if let Err(error) = fs::create_dir(&output) {
-        if created_content_directory { let _ = fs::remove_dir(&content_directory); }
+        if created_content_directory {
+            let _ = fs::remove_dir(&content_directory);
+        }
         return Err(io("create content project directory", &output)(error));
     }
     let manifest_path = output.join(kind.manifest_file_name());
     let mut cargo_touched = false;
     let mut workspace_touched = false;
     let create_result = (|| -> Result<(), String> {
-        let template = crate::source::scaffold_content_project(&output, content_id, &version.to_string(), kind)?;
+        let template = crate::source::scaffold_content_project(
+            &output,
+            content_id,
+            &version.to_string(),
+            kind,
+        )?;
         let body = source_project_manifest(name, &version.to_string(), kind, &children, &template);
-        let mut manifest_file = fs::OpenOptions::new().write(true).create_new(true).open(&manifest_path)
+        let mut manifest_file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&manifest_path)
             .map_err(io("create content manifest", &manifest_path))?;
-        manifest_file.write_all(body.as_bytes()).map_err(io("write content manifest", &manifest_path))?;
+        manifest_file
+            .write_all(body.as_bytes())
+            .map_err(io("write content manifest", &manifest_path))?;
         let readme_path = output.join("README.md");
-        let mut readme = fs::OpenOptions::new().write(true).create_new(true).open(&readme_path)
+        let mut readme = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&readme_path)
             .map_err(io("create content README", &readme_path))?;
-        let role_manifest = manifest_path.file_name()
+        let role_manifest = manifest_path
+            .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| "content.vapor.toml".to_owned());
         writeln!(readme,
@@ -1226,33 +1486,295 @@ pub fn create_source_project(
     })();
     if let Err(error) = create_result {
         let mut recovery = Vec::new();
-        if workspace_touched {
-            if let Err(restore_error) = fs::write(&workspace_manifest, &original_workspace) {
-                recovery.push(format!("could not restore {}: {restore_error}", workspace_manifest.display()));
-            }
+        if workspace_touched
+            && let Err(restore_error) = fs::write(&workspace_manifest, &original_workspace)
+        {
+            recovery.push(format!(
+                "could not restore {}: {restore_error}",
+                workspace_manifest.display()
+            ));
         }
-        if cargo_touched {
-            if let Err(restore_error) = fs::write(&cargo_manifest, &original_cargo) {
-                recovery.push(format!("could not restore {}: {restore_error}", cargo_manifest.display()));
-            }
+        if cargo_touched && let Err(restore_error) = fs::write(&cargo_manifest, &original_cargo) {
+            recovery.push(format!(
+                "could not restore {}: {restore_error}",
+                cargo_manifest.display()
+            ));
         }
         if let Err(cleanup_error) = fs::remove_dir_all(&output) {
-            recovery.push(format!("could not remove incomplete project {}: {cleanup_error}", output.display()));
+            recovery.push(format!(
+                "could not remove incomplete project {}: {cleanup_error}",
+                output.display()
+            ));
         }
-        if created_content_directory {
-            if let Err(error) = fs::remove_dir(&content_directory)
-                && error.kind() != std::io::ErrorKind::DirectoryNotEmpty
-                && error.kind() != std::io::ErrorKind::NotFound
-            {
-                recovery.push(format!("could not remove empty workspace content directory {}: {error}", content_directory.display()));
-            }
+        if created_content_directory
+            && let Err(error) = fs::remove_dir(&content_directory)
+            && error.kind() != std::io::ErrorKind::DirectoryNotEmpty
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            recovery.push(format!(
+                "could not remove empty workspace content directory {}: {error}",
+                content_directory.display()
+            ));
         }
         if recovery.is_empty() {
             return Err(error);
         }
-        return Err(format!("{error}; recovery also reported: {}", recovery.join("; ")));
+        return Err(format!(
+            "{error}; recovery also reported: {}",
+            recovery.join("; ")
+        ));
     }
     Ok(manifest_path)
+}
+
+/// Load the editable dependency graph for a locally authored Packagepack.
+pub fn load_source_composition(
+    paths: &EnvironmentPaths,
+    selector: &str,
+) -> Result<SourceComposition, String> {
+    let catalog = discover(paths)?;
+    let artifact = catalog
+        .find(selector)
+        .ok_or_else(|| format!("Packagepack is no longer available in this workspace: {selector}"))?;
+    if artifact.kind() != ContentKind::Packagepack {
+        return Err(format!("{} is {}, not a Packagepack", artifact.id(), artifact.kind()));
+    }
+    let root = fs::canonicalize(paths.source().root())
+        .map_err(io("resolve source workspace", paths.source().root()))?;
+    let metadata = fs::symlink_metadata(artifact.manifest())
+        .map_err(io("inspect Packagepack manifest", artifact.manifest()))?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(format!("Packagepack manifest must be a regular file: {}", artifact.manifest().display()));
+    }
+    let manifest = fs::canonicalize(artifact.manifest())
+        .map_err(io("resolve Packagepack manifest", artifact.manifest()))?;
+    if !manifest.starts_with(&root) {
+        return Err("Packagepack manifest resolves outside the selected workspace".to_owned());
+    }
+    let source = fs::read_to_string(&manifest).map_err(io("read Packagepack manifest", &manifest))?;
+    Ok(SourceComposition {
+        id: artifact.id().to_owned(),
+        version: artifact.version().map(ToOwned::to_owned),
+        manifest,
+        source,
+        links: artifact.dependencies().iter().map(CompositionLink::from).collect(),
+    })
+}
+
+/// Replace a source Packagepack's dependency graph after validating the exact
+/// source snapshot and each selected edge against the live workspace catalog.
+pub fn save_source_composition(
+    paths: &EnvironmentPaths,
+    selector: &str,
+    expected_source: &str,
+    links: &[CompositionLink],
+) -> Result<SourceComposition, String> {
+    let current = load_source_composition(paths, selector)?;
+    if current.source != expected_source {
+        return Err("Packagepack changed on disk since it was opened; reload it before saving".to_owned());
+    }
+    let lock_path = current.manifest.with_extension("vapor-compose.lock");
+    let lock_file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&lock_path)
+        .map_err(|error| format!("cannot acquire composition edit lock '{}': {error}", lock_path.display()))?;
+    let lock = CompositionEditLock { path: lock_path, file: Some(lock_file) };
+    let locked_source = fs::read_to_string(&current.manifest)
+        .map_err(io("re-read Packagepack manifest", &current.manifest))?;
+    if locked_source != expected_source {
+        return Err("Packagepack changed while the edit was being prepared; reload it before saving".to_owned());
+    }
+
+    let catalog = discover(paths)?;
+    let root_id = catalog.find(selector)
+        .ok_or_else(|| format!("Packagepack is no longer available in this workspace: {selector}"))?
+        .id().to_owned();
+    let mut selected = Vec::with_capacity(links.len());
+    let mut seen = BTreeSet::new();
+    for link in links {
+        let selector_key = format!("{}\0{}", link.relationship, link.id);
+        if !seen.insert(selector_key) {
+            return Err(format!("duplicate composition edge: {} ({})", link.id, link.relationship));
+        }
+        let requirement = link.version.as_deref()
+            .map(semver::VersionReq::parse)
+            .transpose()
+            .map_err(|error| format!("invalid version requirement for {}: {error}", link.id))?;
+        let child = find_local_source(&catalog, &link.id, requirement.as_ref())
+            .ok_or_else(|| format!("selected content is no longer available at the requested version in this workspace: {} {}", link.id, link.version.as_deref().unwrap_or("")))?;
+        if child.id() == root_id {
+            return Err("a Packagepack cannot depend on itself".to_owned());
+        }
+        if !source_dependency_allowed(ContentKind::Packagepack, child.kind()) {
+            return Err(format!("{} cannot be included in a Packagepack", child.kind()));
+        }
+        let expected_relationship = match child.kind() {
+            ContentKind::Engine => "engine",
+            ContentKind::Enginepack => "enginepack",
+            ContentKind::Game => "game",
+            ContentKind::Gamepack => "gamepack",
+            _ => "dependency",
+        };
+        if link.relationship != expected_relationship {
+            return Err(format!("{} must use the '{}' relationship, not '{}'", child.id(), expected_relationship, link.relationship));
+        }
+        selected.push(child);
+    }
+    validate_composition_children(ContentKind::Packagepack, &selected)?;
+    validate_local_source_graph(&catalog, &root_id, &selected)?;
+
+    let mut document = expected_source
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|error| format!("Packagepack manifest is not valid TOML: {error}"))?;
+    let packagepack = document
+        .get_mut("packagepack")
+        .and_then(toml_edit::Item::as_table_mut)
+        .ok_or_else(|| "Packagepack manifest has no [packagepack] table".to_owned())?;
+    for relationship in ["engine", "enginepack", "game", "gamepack"] {
+        packagepack.remove(relationship);
+    }
+    packagepack.remove("dependencies");
+    let mut dependencies = toml_edit::ArrayOfTables::new();
+    for link in links {
+        let mut reference = toml_edit::Table::new();
+        reference.insert("id", toml_edit::value(link.id.clone()));
+        if let Some(version) = &link.version { reference.insert("version", toml_edit::value(version.clone())); }
+        if link.optional { reference.insert("optional", toml_edit::value(true)); }
+        if let Some(workshop_id) = &link.workshop_id { reference.insert("workshop_id", toml_edit::value(workshop_id.clone())); }
+        if let Some(reason) = &link.reason { reference.insert("reason", toml_edit::value(reason.clone())); }
+        match link.relationship.as_str() {
+            "engine" | "enginepack" | "game" | "gamepack" => {
+                packagepack.insert(link.relationship.as_str(), toml_edit::Item::Table(reference));
+            }
+            "dependency" => dependencies.push(reference),
+            other => return Err(format!("unsupported Packagepack relationship: {other}")),
+        }
+    }
+    if !dependencies.is_empty() {
+        packagepack.insert("dependencies", toml_edit::Item::ArrayOfTables(dependencies));
+    }
+    let updated = document.to_string();
+    // Confirm the new authored graph is parseable and discoverable before replacing the source.
+    let temporary = composition_temp_path(&current.manifest);
+    if let Err(error) = write_composition_temp(&temporary, &updated, &current.manifest) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    let backup = composition_temp_path_with_suffix(&current.manifest, "backup");
+    if let Err(error) = fs::rename(&current.manifest, &backup) {
+        let _ = fs::remove_file(&temporary);
+        return Err(io("prepare Packagepack manifest replacement", &current.manifest)(error));
+    }
+    if let Err(error) = fs::rename(&temporary, &current.manifest) {
+        let restore = fs::rename(&backup, &current.manifest);
+        let _ = fs::remove_file(&temporary);
+        return Err(match restore {
+            Ok(()) => io("replace Packagepack manifest", &current.manifest)(error),
+            Err(restore) => format!("failed to replace Packagepack manifest: {error}; recovery failed: {restore}"),
+        });
+    }
+    if let Err(error) = discover(paths) {
+        let _ = fs::remove_file(&current.manifest);
+        let restore = fs::rename(&backup, &current.manifest);
+        return Err(match restore {
+            Ok(()) => format!("new Packagepack graph could not be discovered: {error}; original manifest restored"),
+            Err(restore) => format!("new Packagepack graph could not be discovered: {error}; recovery failed: {restore}"),
+        });
+    }
+    let saved = match load_source_composition(paths, selector) {
+        Ok(saved) => saved,
+        Err(error) => {
+            let _ = fs::remove_file(&current.manifest);
+            let restore = fs::rename(&backup, &current.manifest);
+            return Err(match restore {
+                Ok(()) => format!("saved Packagepack graph could not be reopened: {error}; original manifest restored"),
+                Err(restore) => format!("saved Packagepack graph could not be reopened: {error}; recovery failed: {restore}"),
+            });
+        }
+    };
+    let _ = fs::remove_file(&backup);
+    drop(lock);
+    Ok(saved)
+}
+
+fn find_local_source<'a>(
+    catalog: &'a ContentCatalog,
+    id: &str,
+    requirement: Option<&semver::VersionReq>,
+) -> Option<&'a ContentArtifact> {
+    catalog.artifacts().iter().find(|artifact| {
+        artifact.id() == id && requirement.is_none_or(|requirement| {
+            artifact.version().and_then(|version| semver::Version::parse(version).ok())
+                .is_some_and(|version| requirement.matches(&version))
+        })
+    })
+}
+
+fn validate_local_source_graph(
+    catalog: &ContentCatalog,
+    root_id: &str,
+    roots: &[&ContentArtifact],
+) -> Result<(), String> {
+    fn visit(
+        catalog: &ContentCatalog,
+        root_id: &str,
+        artifact: &ContentArtifact,
+        visiting: &mut BTreeSet<String>,
+        visited: &mut BTreeSet<String>,
+    ) -> Result<(), String> {
+        let id = artifact.id();
+        if id == root_id {
+            return Err(format!("composition graph would cycle back to Packagepack {root_id}"));
+        }
+        if visited.contains(id) { return Ok(()); }
+        if !visiting.insert(id.to_owned()) {
+            return Err(format!("source content dependency cycle reaches {id}"));
+        }
+        for dependency in artifact.dependencies().iter().filter(|edge| !edge.optional()) {
+            let requirement = dependency.version().map(semver::VersionReq::parse).transpose()
+                .map_err(|error| format!("{} has an invalid version requirement for {}: {error}", artifact.id(), dependency.id()))?;
+            let child = find_local_source(catalog, dependency.id(), requirement.as_ref()).ok_or_else(|| format!(
+                "local composition rule: {} requires {} {}, but no matching version is authored in this workspace",
+                artifact.id(), dependency.id(), dependency.version().unwrap_or_default()
+            ))?;
+            visit(catalog, root_id, child, visiting, visited)?;
+        }
+        visiting.remove(id);
+        visited.insert(id.to_owned());
+        Ok(())
+    }
+    let mut visiting = BTreeSet::new();
+    let mut visited = BTreeSet::new();
+    for root in roots {
+        visit(catalog, root_id, root, &mut visiting, &mut visited)?;
+    }
+    Ok(())
+}
+
+struct CompositionEditLock { path: PathBuf, file: Option<fs::File> }
+impl Drop for CompositionEditLock {
+    fn drop(&mut self) {
+        drop(self.file.take());
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+fn composition_temp_path(manifest: &Path) -> PathBuf { composition_temp_path_with_suffix(manifest, "tmp") }
+fn composition_temp_path_with_suffix(manifest: &Path, suffix: &str) -> PathBuf {
+    let name = manifest.file_name().unwrap_or_else(|| std::ffi::OsStr::new("manifest"));
+    let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos();
+    manifest.with_file_name(format!(".{}.{}.{nonce}.{suffix}", name.to_string_lossy(), std::process::id()))
+}
+fn write_composition_temp(path: &Path, contents: &str, original: &Path) -> Result<(), String> {
+    let mut file = fs::OpenOptions::new().write(true).create_new(true).open(path)
+        .map_err(io("create temporary composition manifest", path))?;
+    file.write_all(contents.as_bytes()).map_err(io("write temporary composition manifest", path))?;
+    file.sync_all().map_err(io("sync temporary composition manifest", path))?;
+    if let Ok(metadata) = fs::metadata(original) {
+        fs::set_permissions(path, metadata.permissions()).map_err(io("preserve composition manifest permissions", path))?;
+    }
+    Ok(())
 }
 
 /// Whether a source content role can directly depend on another role.
@@ -1262,11 +1784,26 @@ pub fn create_source_project(
 pub fn source_dependency_allowed(parent: ContentKind, child: ContentKind) -> bool {
     match parent {
         ContentKind::Packagepack => true,
-        ContentKind::Enginepack => matches!(child, ContentKind::Engine | ContentKind::EngineMod | ContentKind::Enginepack),
-        ContentKind::Gamepack => matches!(child, ContentKind::Game | ContentKind::GameMod | ContentKind::Gamepack),
-        ContentKind::Modpack => matches!(child, ContentKind::EngineMod | ContentKind::GameMod | ContentKind::ExtensionMod | ContentKind::Modpack),
+        ContentKind::Enginepack => matches!(
+            child,
+            ContentKind::Engine | ContentKind::EngineMod | ContentKind::Enginepack
+        ),
+        ContentKind::Gamepack => matches!(
+            child,
+            ContentKind::Game | ContentKind::GameMod | ContentKind::Gamepack
+        ),
+        ContentKind::Modpack => matches!(
+            child,
+            ContentKind::EngineMod
+                | ContentKind::GameMod
+                | ContentKind::ExtensionMod
+                | ContentKind::Modpack
+        ),
         ContentKind::Game => child == ContentKind::Engine,
-        ContentKind::Engine | ContentKind::EngineMod | ContentKind::GameMod | ContentKind::ExtensionMod => true,
+        ContentKind::Engine
+        | ContentKind::EngineMod
+        | ContentKind::GameMod
+        | ContentKind::ExtensionMod => true,
     }
 }
 
@@ -1288,13 +1825,25 @@ pub fn create_basic_content_workspace(
     Ok(report.root().to_path_buf())
 }
 
-fn validate_composition_children(kind: ContentKind, children: &[&ContentArtifact]) -> Result<(), String> {
-    let count = |matching: fn(ContentKind) -> bool| children.iter().filter(|child| matching(child.kind())).count();
+fn validate_composition_children(
+    kind: ContentKind,
+    children: &[&ContentArtifact],
+) -> Result<(), String> {
+    let count = |matching: fn(ContentKind) -> bool| {
+        children
+            .iter()
+            .filter(|child| matching(child.kind()))
+            .count()
+    };
     match kind {
-        ContentKind::Packagepack if count(|kind| matches!(kind, ContentKind::Engine | ContentKind::Enginepack)) != 1 => {
+        ContentKind::Packagepack
+            if count(|kind| matches!(kind, ContentKind::Engine | ContentKind::Enginepack)) != 1 =>
+        {
             Err("a Packagepack needs exactly one Engine or Enginepack dependency".to_owned())
         }
-        ContentKind::Packagepack if count(|kind| matches!(kind, ContentKind::Game | ContentKind::Gamepack)) > 1 => {
+        ContentKind::Packagepack
+            if count(|kind| matches!(kind, ContentKind::Game | ContentKind::Gamepack)) > 1 =>
+        {
             Err("a Packagepack can select at most one Game or Gamepack".to_owned())
         }
         ContentKind::Game if count(|kind| kind == ContentKind::Engine) != 1 => {
@@ -1312,21 +1861,32 @@ fn validate_composition_children(kind: ContentKind, children: &[&ContentArtifact
 
 fn cargo_workspace_with_member(source: &str, member: &Path) -> Result<String, String> {
     let member = member.to_string_lossy().replace('\\', "/");
-    let mut document = source.parse::<toml_edit::DocumentMut>()
+    let mut document = source
+        .parse::<toml_edit::DocumentMut>()
         .map_err(|error| format!("Cargo.toml is not valid TOML: {error}"))?;
     if document.get("workspace").is_none() {
         document.insert("workspace", toml_edit::Item::Table(toml_edit::Table::new()));
     }
-    let workspace = document.get_mut("workspace")
+    let workspace = document
+        .get_mut("workspace")
         .and_then(toml_edit::Item::as_table_mut)
-        .ok_or_else(|| "Cargo.toml [workspace] must be a table before content can be added".to_owned())?;
+        .ok_or_else(|| {
+            "Cargo.toml [workspace] must be a table before content can be added".to_owned()
+        })?;
 
-    let excluded = workspace.get("exclude")
+    let excluded = workspace
+        .get("exclude")
         .and_then(toml_edit::Item::as_array)
-        .is_some_and(|patterns| patterns.iter().filter_map(toml_edit::Value::as_str)
-            .any(|pattern| cargo_member_pattern_matches(pattern, &member)));
+        .is_some_and(|patterns| {
+            patterns
+                .iter()
+                .filter_map(toml_edit::Value::as_str)
+                .any(|pattern| cargo_member_pattern_matches(pattern, &member))
+        });
     if excluded {
-        return Err(format!("Cargo.toml excludes '{member}' from the workspace; remove that exclusion before creating the content project"));
+        return Err(format!(
+            "Cargo.toml excludes '{member}' from the workspace; remove that exclusion before creating the content project"
+        ));
     }
     if workspace.get("members").is_none() {
         workspace.insert(
@@ -1334,10 +1894,13 @@ fn cargo_workspace_with_member(source: &str, member: &Path) -> Result<String, St
             toml_edit::Item::Value(toml_edit::Value::Array(toml_edit::Array::new())),
         );
     }
-    let members = workspace.get_mut("members")
+    let members = workspace
+        .get_mut("members")
         .and_then(toml_edit::Item::as_array_mut)
         .ok_or_else(|| "Cargo.toml [workspace].members must be an array".to_owned())?;
-    let covered = members.iter().filter_map(toml_edit::Value::as_str)
+    let covered = members
+        .iter()
+        .filter_map(toml_edit::Value::as_str)
         .any(|pattern| cargo_member_pattern_matches(pattern, &member));
     if !covered {
         members.push(member);
@@ -1375,12 +1938,18 @@ fn cargo_member_pattern_matches(pattern: &str, member: &str) -> bool {
         }
         pattern_index == pattern.len()
     }
-    fn match_segments(patterns: &[&str], values: &[&str], pattern_index: usize, value_index: usize) -> bool {
-        if pattern_index == patterns.len() { return value_index == values.len(); }
+    fn match_segments(
+        patterns: &[&str],
+        values: &[&str],
+        pattern_index: usize,
+        value_index: usize,
+    ) -> bool {
+        if pattern_index == patterns.len() {
+            return value_index == values.len();
+        }
         if patterns[pattern_index] == "**" {
-            return (value_index..=values.len()).any(|next| {
-                match_segments(patterns, values, pattern_index + 1, next)
-            });
+            return (value_index..=values.len())
+                .any(|next| match_segments(patterns, values, pattern_index + 1, next));
         }
         value_index < values.len()
             && segment_matches(patterns[pattern_index], values[value_index])
@@ -1398,7 +1967,8 @@ fn source_project_manifest(
     children: &[&ContentArtifact],
     template: &crate::source::GeneratedContentProject,
 ) -> String {
-    let mut output = format!("schema = 1\n\n[{kind}]\nname = \"{name}\"\nversion = \"{version}\"\n");
+    let mut output =
+        format!("schema = 1\n\n[{kind}]\nname = \"{name}\"\nversion = \"{version}\"\n");
     match template.output {
         Some(crate::source::GeneratedOutputKind::Binary) => {
             output.push_str(&format!("binaries = [\"{}\"]\n", template.crate_name));
@@ -1428,7 +1998,10 @@ fn source_project_manifest(
                 }
             }
         } else {
-            output.push_str(&format!("\n[[{kind}.dependencies]]\nid = \"{}\"\n", child.id()));
+            output.push_str(&format!(
+                "\n[[{kind}.dependencies]]\nid = \"{}\"\n",
+                child.id()
+            ));
             if let Some(version) = child.version() {
                 output.push_str(&format!("version = \"={version}\"\n"));
             }
@@ -1981,7 +2554,15 @@ pub fn install_with_account_for_targets(
         account,
         runtime_targets: &runtime_targets,
     };
-    install_selector(&context, selector, None, false, &mut index, &mut visiting, &mut reports)?;
+    install_selector(
+        &context,
+        selector,
+        None,
+        false,
+        &mut index,
+        &mut visiting,
+        &mut reports,
+    )?;
     save_index(&layout, &index)?;
     Ok(reports)
 }
@@ -2307,6 +2888,46 @@ pub fn create_workshop_item_for_targets(
     dry_run: bool,
     confirmed: bool,
 ) -> Result<WorkshopOperationReport, String> {
+    create_workshop_item_for_targets_checked(
+        paths,
+        selector,
+        account,
+        target_triples,
+        dry_run,
+        confirmed,
+        None,
+    )
+}
+
+/// Create a Workshop item only if the package staged for upload matches the
+/// exact fingerprint previously reviewed by the caller.
+pub fn create_workshop_item_reviewed(
+    paths: &EnvironmentPaths,
+    selector: &str,
+    expected_fingerprint: &str,
+    account: &str,
+    confirmed: bool,
+) -> Result<WorkshopOperationReport, String> {
+    create_workshop_item_for_targets_checked(
+        paths,
+        selector,
+        Some(account),
+        &[],
+        false,
+        confirmed,
+        Some(expected_fingerprint),
+    )
+}
+
+fn create_workshop_item_for_targets_checked(
+    paths: &EnvironmentPaths,
+    selector: &str,
+    account: Option<&str>,
+    target_triples: &[String],
+    dry_run: bool,
+    confirmed: bool,
+    expected_fingerprint: Option<&str>,
+) -> Result<WorkshopOperationReport, String> {
     let catalog = discover(paths)?;
     let artifact = catalog.find(selector).ok_or_else(|| {
         format!("unknown content artifact '{selector}'\nhelp: inspect source content with `content list`")
@@ -2336,14 +2957,44 @@ pub fn create_workshop_item_for_targets(
     }
 
     let package = package_for_targets(paths, artifact.id(), false, target_triples)?;
-    let script = write_workshop_script(paths, artifact, package.root(), None, dry_run)?;
+    let mut reviewed_stage = None;
+    let mut package_fingerprint = format!(
+        "{}:{}",
+        package.fingerprint().algorithm(),
+        package.fingerprint().hash()
+    );
+    let upload_root = if let Some(expected) = expected_fingerprint {
+        let staged = TemporaryDirectory::new("vapor-workshop-reviewed", artifact.id())?;
+        copy_tree(package.root(), staged.path(), package.root(), &[])?;
+        let fingerprint = fingerprint_tree(staged.path())?;
+        let fingerprint = format!("{}:{}", fingerprint.algorithm(), fingerprint.hash());
+        if fingerprint != expected {
+            return Err(format!(
+                "{} changed after review; stage a fresh Workshop review before uploading",
+                artifact.id()
+            ));
+        }
+        package_fingerprint = fingerprint;
+        reviewed_stage = Some(staged);
+        reviewed_stage
+            .as_ref()
+            .expect("reviewed staging directory was retained")
+            .path()
+            .to_path_buf()
+    } else {
+        package.root().to_path_buf()
+    };
+    let script = write_workshop_script(paths, artifact, &upload_root, None, dry_run)?;
     if dry_run {
         let receipt = write_receipt(
             paths.installation(),
             "workshop-create",
             artifact.id(),
             "dry-run",
-            Some(&format!("script={}", script.display())),
+            Some(&format!(
+                "script={}; fingerprint={package_fingerprint}",
+                script.display()
+            )),
         )?;
         return Ok(WorkshopOperationReport {
             artifact_id: artifact.id().to_owned(),
@@ -2369,7 +3020,7 @@ pub fn create_workshop_item_for_targets(
         artifact.id(),
         "created",
         Some(&format!(
-            "script={}; published-file-id={}",
+            "script={}; published-file-id={}; fingerprint={package_fingerprint}",
             script.display(),
             published_file_id
         )),
@@ -2543,6 +3194,53 @@ pub fn publish_workshop_items_for_targets(
     dry_run: bool,
     confirmed: bool,
 ) -> Result<Vec<WorkshopOperationReport>, String> {
+    publish_workshop_items_for_targets_checked(
+        paths,
+        selectors,
+        account,
+        target_triples,
+        change_note,
+        dry_run,
+        confirmed,
+        None,
+    )
+}
+
+/// Update one Workshop item only if the package staged for upload matches the
+/// exact fingerprint previously reviewed by the caller.
+pub fn publish_workshop_item_reviewed(
+    paths: &EnvironmentPaths,
+    selector: &str,
+    expected_fingerprint: &str,
+    account: &str,
+    change_note: Option<&str>,
+    confirmed: bool,
+) -> Result<WorkshopOperationReport, String> {
+    let mut reports = publish_workshop_items_for_targets_checked(
+        paths,
+        &[selector.to_owned()],
+        Some(account),
+        &[],
+        change_note,
+        false,
+        confirmed,
+        Some((selector, expected_fingerprint)),
+    )?;
+    reports
+        .pop()
+        .ok_or_else(|| "no Workshop item was published".to_owned())
+}
+
+fn publish_workshop_items_for_targets_checked(
+    paths: &EnvironmentPaths,
+    selectors: &[String],
+    account: Option<&str>,
+    target_triples: &[String],
+    change_note: Option<&str>,
+    dry_run: bool,
+    confirmed: bool,
+    expected_fingerprint: Option<(&str, &str)>,
+) -> Result<Vec<WorkshopOperationReport>, String> {
     if selectors.is_empty() {
         return Err("at least one Workshop artifact is required".to_owned());
     }
@@ -2560,6 +3258,7 @@ pub fn publish_workshop_items_for_targets(
     }
 
     let mut staged = Vec::new();
+    let mut reviewed_stages = Vec::new();
     for selector in selectors {
         let artifact = catalog.find(selector).ok_or_else(|| {
             format!(
@@ -2582,7 +3281,30 @@ pub fn publish_workshop_items_for_targets(
         }
 
         let package = package_for_targets(paths, artifact.id(), false, target_triples)?;
-        let script = write_workshop_script(paths, artifact, package.root(), change_note, dry_run)?;
+        let mut package_fingerprint = format!(
+            "{}:{}",
+            package.fingerprint().algorithm(),
+            package.fingerprint().hash()
+        );
+        let mut upload_root = package.root().to_path_buf();
+        if let Some((reviewed_selector, expected)) = expected_fingerprint
+            && selector.as_str() == reviewed_selector
+        {
+            let reviewed = TemporaryDirectory::new("vapor-workshop-reviewed", artifact.id())?;
+            copy_tree(package.root(), reviewed.path(), package.root(), &[])?;
+            let fingerprint = fingerprint_tree(reviewed.path())?;
+            let fingerprint = format!("{}:{}", fingerprint.algorithm(), fingerprint.hash());
+            if fingerprint != expected {
+                return Err(format!(
+                    "{} changed after review; stage a fresh Workshop review before uploading",
+                    artifact.id()
+                ));
+            }
+            package_fingerprint = fingerprint;
+            upload_root = reviewed.path().to_path_buf();
+            reviewed_stages.push(reviewed);
+        }
+        let script = write_workshop_script(paths, artifact, &upload_root, change_note, dry_run)?;
         staged.push((
             artifact.id().to_owned(),
             script,
@@ -2590,26 +3312,30 @@ pub fn publish_workshop_items_for_targets(
                 .workshop()
                 .published_file_id()
                 .map(ToOwned::to_owned),
+            package_fingerprint,
         ));
     }
 
     if !dry_run {
         let scripts = staged
             .iter()
-            .map(|(_, script, _)| script.clone())
+            .map(|(_, script, _, _)| script.clone())
             .collect::<Vec<_>>();
         run_steamcmd_workshop_builds(paths, account.expect("account checked"), &scripts)?;
     }
 
     let receipt_status = if dry_run { "dry-run" } else { "uploaded" };
     let mut reports = Vec::new();
-    for (artifact_id, script, published_file_id) in staged {
+    for (artifact_id, script, published_file_id, fingerprint) in staged {
         let receipt = write_receipt(
             paths.installation(),
             "workshop-publish",
             &artifact_id,
             receipt_status,
-            Some(&format!("script={}", script.display())),
+            Some(&format!(
+                "script={}; fingerprint={fingerprint}",
+                script.display()
+            )),
         )?;
         reports.push(WorkshopOperationReport {
             artifact_id,
@@ -2670,34 +3396,57 @@ pub struct InstalledArtifactSnapshot {
     workshop_id: Option<String>,
     installed_root: PathBuf,
     fingerprint: Fingerprint,
+    source: String,
     enabled: bool,
     dependencies: Vec<ContentReference>,
 }
 
 impl InstalledArtifactSnapshot {
     /// Installed content ID.
-    pub fn artifact_id(&self) -> &str { &self.artifact_id }
+    pub fn artifact_id(&self) -> &str {
+        &self.artifact_id
+    }
 
     /// Installed exact version, when declared.
-    pub fn version(&self) -> Option<&str> { self.version.as_deref() }
+    pub fn version(&self) -> Option<&str> {
+        self.version.as_deref()
+    }
 
     /// Rust-defined Vapor content kind.
-    pub fn kind(&self) -> &str { &self.kind }
+    pub fn kind(&self) -> &str {
+        &self.kind
+    }
 
     /// Workshop PublishedFileId associated with the acquired or installed item.
-    pub fn workshop_id(&self) -> Option<&str> { self.workshop_id.as_deref() }
+    pub fn workshop_id(&self) -> Option<&str> {
+        self.workshop_id.as_deref()
+    }
 
     /// App-owned installed content directory.
-    pub fn installed_root(&self) -> &Path { &self.installed_root }
+    pub fn installed_root(&self) -> &Path {
+        &self.installed_root
+    }
 
     /// Fingerprint recorded for the installed tree.
-    pub fn fingerprint(&self) -> &Fingerprint { &self.fingerprint }
+    pub fn fingerprint(&self) -> &Fingerprint {
+        &self.fingerprint
+    }
+
+    /// Acquisition/install source recorded by Vapor (for example `cache` or
+    /// `source-package`).
+    pub fn source(&self) -> &str {
+        &self.source
+    }
 
     /// Whether this record is currently enabled.
-    pub fn enabled(&self) -> bool { self.enabled }
+    pub fn enabled(&self) -> bool {
+        self.enabled
+    }
 
     /// Declared dependency and conflict edges from the installed manifest.
-    pub fn dependencies(&self) -> &[ContentReference] { &self.dependencies }
+    pub fn dependencies(&self) -> &[ContentReference] {
+        &self.dependencies
+    }
 }
 
 /// Check whether an exact installed selector is present in app-owned state.
@@ -2721,11 +3470,15 @@ pub fn cached_artifact(
 ) -> Result<InstalledArtifactSnapshot, String> {
     let layout = ContentLayout::new(installation);
     let index = load_index(&layout)?;
-    let (artifact_id, cached) = index.cache_by_selector(selector)
+    let (artifact_id, cached) = index
+        .cache_by_selector(selector)
         .ok_or_else(|| format!("content is not in the app-owned cache: {selector}"))?;
     let artifact = read_deployed_manifest(&cached.cache_root)?;
     if artifact.id() != artifact_id {
-        return Err(format!("cached manifest identity {} does not match cache index {artifact_id}", artifact.id()));
+        return Err(format!(
+            "cached manifest identity {} does not match cache index {artifact_id}",
+            artifact.id()
+        ));
     }
     Ok(InstalledArtifactSnapshot {
         artifact_id,
@@ -2734,6 +3487,7 @@ pub fn cached_artifact(
         workshop_id: cached.workshop_id.clone(),
         installed_root: cached.cache_root.clone(),
         fingerprint: cached.fingerprint.clone(),
+        source: "cache".to_owned(),
         enabled: true,
         dependencies: artifact.dependencies().to_vec(),
     })
@@ -2753,21 +3507,27 @@ pub fn installed_artifacts(
 ) -> Result<Vec<InstalledArtifactSnapshot>, String> {
     let layout = ContentLayout::new(installation);
     let index = load_index(&layout)?;
-    selectors.iter().map(|selector| {
-        let key = resolve_installed_selector(&index, selector)?;
-        let record = index.installed.get(&key)
-            .ok_or_else(|| format!("content is not installed: {selector}"))?;
-        Ok(InstalledArtifactSnapshot {
-            artifact_id: record.artifact_id.clone(),
-            version: record.version.clone(),
-            kind: record.kind.clone(),
-            workshop_id: record.workshop_id.clone(),
-            installed_root: record.installed_root.clone(),
-            fingerprint: record.fingerprint.clone(),
-            enabled: record.enabled,
-            dependencies: record.dependencies.clone(),
+    selectors
+        .iter()
+        .map(|selector| {
+            let key = resolve_installed_selector(&index, selector)?;
+            let record = index
+                .installed
+                .get(&key)
+                .ok_or_else(|| format!("content is not installed: {selector}"))?;
+            Ok(InstalledArtifactSnapshot {
+                artifact_id: record.artifact_id.clone(),
+                version: record.version.clone(),
+                kind: record.kind.clone(),
+                workshop_id: record.workshop_id.clone(),
+                installed_root: record.installed_root.clone(),
+                fingerprint: record.fingerprint.clone(),
+                source: record.source.clone(),
+                enabled: record.enabled,
+                dependencies: record.dependencies.clone(),
+            })
         })
-    }).collect()
+        .collect()
 }
 
 fn installed_snapshot_from_record(record: &InstalledRecord) -> InstalledArtifactSnapshot {
@@ -2778,6 +3538,7 @@ fn installed_snapshot_from_record(record: &InstalledRecord) -> InstalledArtifact
         workshop_id: record.workshop_id.clone(),
         installed_root: record.installed_root.clone(),
         fingerprint: record.fingerprint.clone(),
+        source: record.source.clone(),
         enabled: record.enabled,
         dependencies: record.dependencies.clone(),
     }
@@ -2865,7 +3626,9 @@ pub struct InstallPlan {
 
 impl InstallPlan {
     /// Whether every required dependency is locally resolvable.
-    pub fn ready(&self) -> bool { self.blockers.is_empty() }
+    pub fn ready(&self) -> bool {
+        self.blockers.is_empty()
+    }
 }
 
 /// Resolve a composition without packaging, downloading, installing, or writing state.
@@ -2935,7 +3698,9 @@ fn resolve_install_plan_node(
     } else {
         requirement.map(ContentReference::id).map(ToOwned::to_owned)
     };
-    let installed = installed_key.as_ref().and_then(|key| context.index.installed.get(key));
+    let installed = installed_key
+        .as_ref()
+        .and_then(|key| context.index.installed.get(key));
     if !root
         && !local_closure
         && let Some(installed) = installed
@@ -2943,17 +3708,26 @@ fn resolve_install_plan_node(
         && version_satisfies(installed.version.as_deref(), requested_version.as_ref())
     {
         let artifact = read_deployed_manifest(&installed.installed_root)?;
-        return resolve_install_plan_artifact(context, artifact, InstallPlanSource::Installed, true, false);
+        return resolve_install_plan_artifact(
+            context,
+            artifact,
+            InstallPlanSource::Installed,
+            true,
+            false,
+        );
     }
 
-    let source_artifact = context.catalog.and_then(|catalog| {
-        if root {
-            catalog.find(selector)
-        } else {
-            let id = requirement.map(ContentReference::id).unwrap_or(selector);
-            catalog.satisfying_version(id, requested_version.as_ref())
-        }
-    }).cloned();
+    let source_artifact = context
+        .catalog
+        .and_then(|catalog| {
+            if root {
+                catalog.find(selector)
+            } else {
+                let id = requirement.map(ContentReference::id).unwrap_or(selector);
+                catalog.satisfying_version(id, requested_version.as_ref())
+            }
+        })
+        .cloned();
     if let Some(artifact) = source_artifact {
         return resolve_install_plan_artifact(
             context,
@@ -2981,8 +3755,14 @@ fn resolve_install_plan_node(
             return Ok(());
         }
         if version_satisfies(artifact.version(), requested_version.as_ref()) {
-            let already_installed = context.index.installed.get(artifact.id())
-                .is_some_and(|record| record.enabled && record.version.as_deref() == artifact.version());
+            let already_installed =
+                context
+                    .index
+                    .installed
+                    .get(artifact.id())
+                    .is_some_and(|record| {
+                        record.enabled && record.version.as_deref() == artifact.version()
+                    });
             return resolve_install_plan_artifact(
                 context,
                 artifact,
@@ -2999,7 +3779,13 @@ fn resolve_install_plan_node(
         && version_satisfies(installed.version.as_deref(), requested_version.as_ref())
     {
         let artifact = read_deployed_manifest(&installed.installed_root)?;
-        return resolve_install_plan_artifact(context, artifact, InstallPlanSource::Installed, true, false);
+        return resolve_install_plan_artifact(
+            context,
+            artifact,
+            InstallPlanSource::Installed,
+            true,
+            false,
+        );
     }
 
     if let Some(installed) = installed {
@@ -3043,8 +3829,17 @@ fn resolve_install_plan_node(
     }
 
     let identity = requirement.map(ContentReference::id).unwrap_or(selector);
-    let version = requirement.and_then(ContentReference::version).unwrap_or("any version");
-    let message = format!("required {} '{}' at {} is unavailable in the workspace, cache, or enabled installation", requirement.map(ContentReference::relationship).unwrap_or("root"), identity, version);
+    let version = requirement
+        .and_then(ContentReference::version)
+        .unwrap_or("any version");
+    let message = format!(
+        "required {} '{}' at {} is unavailable in the workspace, cache, or enabled installation",
+        requirement
+            .map(ContentReference::relationship)
+            .unwrap_or("root"),
+        identity,
+        version
+    );
     if requirement.is_some_and(ContentReference::optional) {
         context.warnings.push(message);
     } else {
@@ -3062,7 +3857,9 @@ fn resolve_install_plan_artifact(
 ) -> Result<(), String> {
     let id = artifact.id().to_owned();
     if context.visiting.contains(&id) {
-        context.blockers.push(format!("dependency cycle includes {id}"));
+        context
+            .blockers
+            .push(format!("dependency cycle includes {id}"));
         return Ok(());
     }
     let version = artifact.version().map(ToOwned::to_owned);
@@ -3073,30 +3870,56 @@ fn resolve_install_plan_artifact(
         return Ok(());
     }
     context.visiting.insert(id.clone());
-    let dependencies = artifact.dependencies().iter().map(|dependency| InstallPlanDependency {
-        id: dependency.id().to_owned(),
-        relationship: dependency.relationship().to_owned(),
-        version: dependency.version().map(ToOwned::to_owned),
-        optional: dependency.optional(),
-    }).collect::<Vec<_>>();
+    let dependencies = artifact
+        .dependencies()
+        .iter()
+        .map(|dependency| InstallPlanDependency {
+            id: dependency.id().to_owned(),
+            relationship: dependency.relationship().to_owned(),
+            version: dependency.version().map(ToOwned::to_owned),
+            optional: dependency.optional(),
+        })
+        .collect::<Vec<_>>();
 
     let descendants_local = local_closure || source == InstallPlanSource::Workspace;
-    let reuse_installed_subgraph = source == InstallPlanSource::Installed && already_installed && !local_closure;
+    let reuse_installed_subgraph =
+        source == InstallPlanSource::Installed && already_installed && !local_closure;
     if !reuse_installed_subgraph {
         for dependency in artifact.dependencies() {
             if dependency.optional() {
-                context.warnings.push(format!("optional {} '{}' is not selected automatically", dependency.relationship(), dependency.id()));
+                context.warnings.push(format!(
+                    "optional {} '{}' is not selected automatically",
+                    dependency.relationship(),
+                    dependency.id()
+                ));
                 continue;
             }
-            resolve_install_plan_node(context, dependency.id(), Some(dependency), false, descendants_local)?;
+            resolve_install_plan_node(
+                context,
+                dependency.id(),
+                Some(dependency),
+                false,
+                descendants_local,
+            )?;
         }
     }
     for conflict in artifact.conflicts() {
         if conflict.id() == id || context.selected.contains_key(conflict.id()) {
-            context.blockers.push(format!("{id} conflicts with planned content '{}'", conflict.id()));
+            context.blockers.push(format!(
+                "{id} conflicts with planned content '{}'",
+                conflict.id()
+            ));
         }
-        if context.index.installed.get(conflict.id()).is_some_and(|installed| installed.enabled) {
-            context.blockers.push(format!("{id} conflicts with installed content '{}'", conflict.id()));
+        if context
+            .index
+            .installed
+            .get(conflict.id())
+            .is_some_and(|installed| installed.enabled)
+        {
+            context.blockers.push(format!(
+                "{id} conflicts with installed content '{}'",
+                conflict.id()
+            ));
         }
     }
     context.visiting.remove(&id);
@@ -3105,7 +3928,10 @@ fn resolve_install_plan_artifact(
         id,
         version,
         kind: artifact.kind().to_string(),
-        published_file_id: artifact.workshop().published_file_id().map(ToOwned::to_owned),
+        published_file_id: artifact
+            .workshop()
+            .published_file_id()
+            .map(ToOwned::to_owned),
         source,
         already_installed,
         dependencies,
@@ -3123,8 +3949,11 @@ struct InstallContext<'a> {
 }
 
 fn version_satisfies(version: Option<&str>, requirement: Option<&semver::VersionReq>) -> bool {
-    let Some(requirement) = requirement else { return true; };
-    version.and_then(|version| semver::Version::parse(version).ok())
+    let Some(requirement) = requirement else {
+        return true;
+    };
+    version
+        .and_then(|version| semver::Version::parse(version).ok())
         .is_some_and(|version| requirement.matches(&version))
 }
 
@@ -3141,7 +3970,11 @@ fn install_selector(
         && let Some(artifact) = catalog.find(selector)
     {
         if expected_id.is_some_and(|expected| artifact.id() != expected) {
-            return Err(format!("dependency selector '{selector}' resolved to '{}', expected '{}'", artifact.id(), expected_id.unwrap_or_default()));
+            return Err(format!(
+                "dependency selector '{selector}' resolved to '{}', expected '{}'",
+                artifact.id(),
+                expected_id.unwrap_or_default()
+            ));
         }
         if !visiting.insert(artifact.id().to_owned()) {
             return Err(format!(
@@ -3154,23 +3987,50 @@ fn install_selector(
             .iter()
             .filter(|item| !item.optional())
         {
-            let requirement = dependency.version()
+            let requirement = dependency
+                .version()
                 .map(semver::VersionReq::parse)
                 .transpose()
-                .map_err(|error| format!("{} has invalid version requirement for {}: {error}", artifact.id(), dependency.id()))?;
+                .map_err(|error| {
+                    format!(
+                        "{} has invalid version requirement for {}: {error}",
+                        artifact.id(),
+                        dependency.id()
+                    )
+                })?;
             if let Some(child) = catalog.satisfying_version(dependency.id(), requirement.as_ref()) {
-                let versioned_selector = child.version()
+                let versioned_selector = child
+                    .version()
                     .map(|version| format!("{}@{}", child.id(), version))
                     .unwrap_or_else(|| child.id().to_owned());
-                if let Some(existing) = reports.iter().find(|report| report.artifact_id() == child.id()) {
+                if let Some(existing) = reports
+                    .iter()
+                    .find(|report| report.artifact_id() == child.id())
+                {
                     if existing.version() == child.version() {
                         continue;
                     }
-                    return Err(format!("{} resolves two versions of '{}', but app installation currently stores one version per content ID", artifact.id(), child.id()));
+                    return Err(format!(
+                        "{} resolves two versions of '{}', but app installation currently stores one version per content ID",
+                        artifact.id(),
+                        child.id()
+                    ));
                 }
-                install_selector(context, &versioned_selector, Some(child.id()), true, index, visiting, reports)?;
+                install_selector(
+                    context,
+                    &versioned_selector,
+                    Some(child.id()),
+                    true,
+                    index,
+                    visiting,
+                    reports,
+                )?;
             } else {
-                return Err(format!("local content '{}' requires every descendant to be authored in the selected workspace, but '{}' has no compatible local source", artifact.id(), dependency.id()));
+                return Err(format!(
+                    "local content '{}' requires every descendant to be authored in the selected workspace, but '{}' has no compatible local source",
+                    artifact.id(),
+                    dependency.id()
+                ));
             }
         }
         for conflict in artifact.conflicts() {
@@ -3186,7 +4046,8 @@ fn install_selector(
                 ));
             }
         }
-        let package_selector = artifact.version()
+        let package_selector = artifact
+            .version()
             .map(|version| format!("{}@{}", artifact.id(), version))
             .unwrap_or_else(|| artifact.id().to_owned());
         let package = package_with_runtime_targets(
@@ -3212,7 +4073,9 @@ fn install_selector(
     }
 
     if require_workspace {
-        return Err(format!("local content requires every descendant to be authored in the selected workspace, but '{selector}' has no compatible local source"));
+        return Err(format!(
+            "local content requires every descendant to be authored in the selected workspace, but '{selector}' has no compatible local source"
+        ));
     }
 
     if index.cache_by_selector(selector).is_none()
@@ -3229,7 +4092,9 @@ fn install_selector(
             CacheRecord {
                 artifact_id: acquired.artifact_id().to_owned(),
                 workshop_id: Some(seed.workshop_id),
-                version: read_deployed_manifest(acquired.cache_root())?.version().map(ToOwned::to_owned),
+                version: read_deployed_manifest(acquired.cache_root())?
+                    .version()
+                    .map(ToOwned::to_owned),
                 cache_root: acquired.cache_root().to_path_buf(),
                 fingerprint: acquired.fingerprint().clone(),
                 acquired_at: now_seconds(),
@@ -3247,7 +4112,11 @@ fn install_selector(
         })?;
     let pseudo = read_deployed_manifest(&cache.cache_root)?;
     if expected_id.is_some_and(|expected| pseudo.id() != expected) {
-        return Err(format!("selector '{selector}' resolved to '{}', expected dependency '{}'", pseudo.id(), expected_id.unwrap_or_default()));
+        return Err(format!(
+            "selector '{selector}' resolved to '{}', expected dependency '{}'",
+            pseudo.id(),
+            expected_id.unwrap_or_default()
+        ));
     }
     let pseudo_id = pseudo.id().to_owned();
     if !visiting.insert(pseudo_id.clone()) {
@@ -3255,28 +4124,57 @@ fn install_selector(
     }
     let result = (|| {
         for dependency in pseudo.dependencies().iter().filter(|item| !item.optional()) {
-            let requirement = dependency.version()
+            let requirement = dependency
+                .version()
                 .map(semver::VersionReq::parse)
                 .transpose()
-                .map_err(|error| format!("{} has invalid version requirement for {}: {error}", pseudo.id(), dependency.id()))?;
-            if index.installed.get(dependency.id()).is_some_and(|installed| {
-                installed.enabled && version_satisfies(installed.version.as_deref(), requirement.as_ref())
-            }) {
+                .map_err(|error| {
+                    format!(
+                        "{} has invalid version requirement for {}: {error}",
+                        pseudo.id(),
+                        dependency.id()
+                    )
+                })?;
+            if index
+                .installed
+                .get(dependency.id())
+                .is_some_and(|installed| {
+                    installed.enabled
+                        && version_satisfies(installed.version.as_deref(), requirement.as_ref())
+                })
+            {
                 continue;
             }
             if let Some(catalog) = context.catalog
-                && let Some(child) = catalog.satisfying_version(dependency.id(), requirement.as_ref())
+                && let Some(child) =
+                    catalog.satisfying_version(dependency.id(), requirement.as_ref())
             {
-                let selector = child.version()
+                let selector = child
+                    .version()
                     .map(|version| format!("{}@{}", child.id(), version))
                     .unwrap_or_else(|| child.id().to_owned());
-                if let Some(existing) = reports.iter().find(|report| report.artifact_id() == child.id()) {
+                if let Some(existing) = reports
+                    .iter()
+                    .find(|report| report.artifact_id() == child.id())
+                {
                     if existing.version() == child.version() {
                         continue;
                     }
-                    return Err(format!("{} resolves two versions of '{}', but app installation currently stores one version per content ID", pseudo.id(), child.id()));
+                    return Err(format!(
+                        "{} resolves two versions of '{}', but app installation currently stores one version per content ID",
+                        pseudo.id(),
+                        child.id()
+                    ));
                 }
-                install_selector(context, &selector, Some(child.id()), false, index, visiting, reports)?;
+                install_selector(
+                    context,
+                    &selector,
+                    Some(child.id()),
+                    false,
+                    index,
+                    visiting,
+                    reports,
+                )?;
                 continue;
             }
             let cache_selector = dependency.workshop_id().unwrap_or_else(|| dependency.id());
@@ -3284,16 +4182,31 @@ fn install_selector(
                 let cached_artifact = read_deployed_manifest(&cached.cache_root)?;
                 if version_satisfies(cached_artifact.version(), requirement.as_ref()) {
                     if cached_artifact.id() != dependency.id() {
-                        return Err(format!("Workshop/cache selector for '{}' resolved to '{}'; dependency identity must match exactly", dependency.id(), cached_artifact.id()));
+                        return Err(format!(
+                            "Workshop/cache selector for '{}' resolved to '{}'; dependency identity must match exactly",
+                            dependency.id(),
+                            cached_artifact.id()
+                        ));
                     }
                     let selector = dependency.workshop_id().unwrap_or(&cache_id);
-                    install_selector(context, selector, Some(dependency.id()), false, index, visiting, reports)?;
+                    install_selector(
+                        context,
+                        selector,
+                        Some(dependency.id()),
+                        false,
+                        index,
+                        visiting,
+                        reports,
+                    )?;
                     continue;
                 }
             }
             return Err(format!(
                 "{} requires {} '{}' at {}, but no compatible installed, local, or cached version is available",
-                pseudo.id(), dependency.relationship(), dependency.id(), dependency.version().unwrap_or("any version")
+                pseudo.id(),
+                dependency.relationship(),
+                dependency.id(),
+                dependency.version().unwrap_or("any version")
             ));
         }
         for conflict in pseudo.conflicts() {
@@ -4238,7 +5151,8 @@ impl Default for ContentIndex {
 
 impl ContentIndex {
     fn cache_by_selector(&self, selector: &str) -> Option<(String, &CacheRecord)> {
-        let (identity, requested_version) = selector.rsplit_once('@')
+        let (identity, requested_version) = selector
+            .rsplit_once('@')
             .map(|(identity, version)| (identity, Some(version)))
             .unwrap_or((selector, None));
         self.caches.iter().find_map(|(id, cache)| {
@@ -4248,7 +5162,8 @@ impl ContentIndex {
                     .workshop_id
                     .as_deref()
                     .is_some_and(|workshop_id| workshop_id == identity))
-                && requested_version.is_none_or(|version| cache.version.as_deref() == Some(version)))
+                && requested_version
+                    .is_none_or(|version| cache.version.as_deref() == Some(version)))
             .then(|| (id.clone(), cache))
         })
     }
@@ -4333,10 +5248,14 @@ fn resolve_installed_selector(index: &ContentIndex, selector: &str) -> Result<St
         && !id.is_empty()
         && !version.is_empty()
     {
-        return index.installed.iter().find_map(|(key, record)| {
-            (record.artifact_id == id && record.version.as_deref() == Some(version))
-                .then(|| key.clone())
-        }).ok_or_else(|| format!("content version is not installed: {selector}"));
+        return index
+            .installed
+            .iter()
+            .find_map(|(key, record)| {
+                (record.artifact_id == id && record.version.as_deref() == Some(version))
+                    .then(|| key.clone())
+            })
+            .ok_or_else(|| format!("content version is not installed: {selector}"));
     }
     index
         .installed

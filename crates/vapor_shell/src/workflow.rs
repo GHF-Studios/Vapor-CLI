@@ -218,10 +218,7 @@ pub fn promote_for_targets(
                         source.display()
                     ));
                 }
-                let destination = installation
-                    .join("bin")
-                    .join(target.triple())
-                    .join(library);
+                let destination = installation.join("bin").join(target.triple()).join(library);
                 ensure_contained(installation, &destination)?;
                 promote_file(&source, &destination)?;
                 println!(
@@ -526,6 +523,14 @@ pub(crate) fn managed_path(paths: &EnvironmentPaths) -> Result<OsString, String>
     let installation = paths.installation();
     let root = installation.root();
     let mut entries = Vec::<PathBuf>::new();
+    // Cargo is an app-local rustup proxy; put the matching app-local compiler
+    // first as well, or it can pick up a host rustc from the inherited PATH.
+    entries.push(
+        crate::app_local_tools::inspect(installation)
+            .rust()
+            .path()
+            .to_path_buf(),
+    );
     entries.push(installation.binaries().to_path_buf());
     entries.push(root.join("bin"));
     if let Some(existing) = env::var_os("PATH") {
