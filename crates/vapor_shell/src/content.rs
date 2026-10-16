@@ -2561,6 +2561,21 @@ pub fn source_dependency_relationship(parent: ContentKind, child: ContentKind) -
     })
 }
 
+/// Return the exclusive authored role slot for dependency choices with bounded
+/// cardinality. Dependencies outside these role slots remain freely composable.
+pub fn source_dependency_choice_group(
+    parent: ContentKind,
+    child: ContentKind,
+) -> Option<&'static str> {
+    match (parent, source_dependency_relationship(parent, child)?) {
+        (ContentKind::Packagepack, "engine" | "enginepack") => Some("engine-choice"),
+        (ContentKind::Packagepack, "game" | "gamepack") => Some("game-choice"),
+        (ContentKind::Game | ContentKind::Enginepack, "engine") => Some("engine"),
+        (ContentKind::Gamepack, "game") => Some("game"),
+        _ => None,
+    }
+}
+
 /// Create the maintained Engine/Game/Packagepack starter workspace at a new
 /// or empty destination, using the installed app's Steam AppID.
 pub fn create_basic_content_workspace(
