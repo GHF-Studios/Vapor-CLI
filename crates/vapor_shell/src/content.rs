@@ -2567,7 +2567,14 @@ pub fn source_dependency_choice_group(
     parent: ContentKind,
     child: ContentKind,
 ) -> Option<&'static str> {
-    match (parent, source_dependency_relationship(parent, child)?) {
+    source_relationship_choice_group(parent, source_dependency_relationship(parent, child)?)
+}
+
+fn source_relationship_choice_group(
+    parent: ContentKind,
+    relationship: &str,
+) -> Option<&'static str> {
+    match (parent, relationship) {
         (ContentKind::Packagepack, "engine" | "enginepack") => Some("engine-choice"),
         (ContentKind::Packagepack, "game" | "gamepack") => Some("game-choice"),
         (ContentKind::Game | ContentKind::Enginepack, "engine") => Some("engine"),
@@ -2621,30 +2628,32 @@ fn validate_source_relationship_cardinality(
     kind: ContentKind,
     relationships: &[String],
 ) -> Result<(), String> {
-    let count = |relationship: &str| {
+    let count_group = |group: &str| {
         relationships
             .iter()
-            .filter(|value| value.as_str() == relationship)
+            .filter(|relationship| {
+                source_relationship_choice_group(kind, relationship.as_str()) == Some(group)
+            })
             .count()
     };
-    match kind {
-        ContentKind::Packagepack if count("engine") + count("enginepack") != 1 => {
-            Err("a Packagepack needs exactly one Engine or Enginepack dependency".to_owned())
+    if let Some(required_group) = source_required_dependency_choice_group(kind)
+        && count_group(required_group) != 1
+    {
+        return Err(match kind {
+            ContentKind::Packagepack => {
+                "a Packagepack needs exactly one Engine or Enginepack dependency"
+            }
+            ContentKind::Game => "a Game needs exactly one Engine dependency",
+            ContentKind::Enginepack => "an Enginepack needs exactly one Engine",
+            ContentKind::Gamepack => "a Gamepack needs exactly one Game",
+            _ => "content is missing a required role dependency",
         }
-        ContentKind::Packagepack if count("game") + count("gamepack") > 1 => {
-            Err("a Packagepack can select at most one Game or Gamepack".to_owned())
-        }
-        ContentKind::Game if count("engine") != 1 => {
-            Err("a Game needs exactly one Engine dependency".to_owned())
-        }
-        ContentKind::Enginepack if count("engine") != 1 => {
-            Err("an Enginepack needs exactly one Engine".to_owned())
-        }
-        ContentKind::Gamepack if count("game") != 1 => {
-            Err("a Gamepack needs exactly one Game".to_owned())
-        }
-        _ => Ok(()),
+        .to_owned());
     }
+    if kind == ContentKind::Packagepack && count_group("game-choice") > 1 {
+        return Err("a Packagepack can select at most one Game or Gamepack".to_owned());
+    }
+    Ok(())
 }
 
 fn cargo_workspace_with_member(source: &str, member: &Path) -> Result<String, String> {
