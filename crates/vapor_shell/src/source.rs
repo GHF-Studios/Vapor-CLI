@@ -137,7 +137,6 @@ pub(crate) fn init_basic_content(options: BasicContentInit) -> Result<InitReport
     if options.app_id == 0 {
         return Err("Steam AppID must be non-zero".to_owned());
     }
-
     if options.path.exists()
         && fs::read_dir(&options.path)
             .map_err(io("read target workspace", &options.path))?
@@ -149,6 +148,11 @@ pub(crate) fn init_basic_content(options: BasicContentInit) -> Result<InitReport
             options.path.display()
         ));
     }
+    let toolchain = vapor_core::ManagedToolchain::discover()
+        .map_err(|error| {
+            format!("cannot create a source workspace without a Vapor toolchain pin: {error}")
+        })?
+        .pin;
     fs::create_dir_all(&options.path).map_err(io("create target workspace", &options.path))?;
 
     let workspace_id = format!("{}/{}", options.organization, options.name);
@@ -170,6 +174,7 @@ pub(crate) fn init_basic_content(options: BasicContentInit) -> Result<InitReport
 name = "{name}"
 organization = "{organization}"
 version = "0.1.0"
+repository = ""
 
 [[workspace.projects]]
 path = "crates/{engine}"
@@ -179,9 +184,25 @@ path = "crates/{game}"
 
 [[workspace.projects]]
 path = "crates/{packagepack}"
+
+[toolchain]
+channel = "{toolchain_channel}"
+version = "{toolchain_version}"
+date = "{toolchain_date}"
+
+[[project]]
+name = "{engine}"
+path = "crates/{engine}"
+
+[[project]]
+name = "{game}"
+path = "crates/{game}"
 "#,
             name = options.name,
             organization = options.organization,
+            toolchain_channel = toolchain.channel,
+            toolchain_version = toolchain.version,
+            toolchain_date = toolchain.date,
         ),
     )?;
     write(
