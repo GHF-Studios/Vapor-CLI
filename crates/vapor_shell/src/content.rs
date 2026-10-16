@@ -341,6 +341,18 @@ pub struct SourceWorkshopMetadata {
     pub policy: WorkshopPolicyDraft,
 }
 
+/// Snapshot of runtime executable and library declarations in a source manifest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceRuntimeOutputs {
+    pub id: String,
+    pub version: Option<String>,
+    pub kind: String,
+    pub manifest: PathBuf,
+    pub source: String,
+    pub binaries: Vec<String>,
+    pub libraries: Vec<String>,
+}
+
 impl From<&ContentReference> for CompositionLink {
     fn from(reference: &ContentReference) -> Self {
         Self {
@@ -1843,23 +1855,7 @@ pub fn load_source_composition(
     paths: &EnvironmentPaths,
     selector: &str,
 ) -> Result<SourceComposition, String> {
-    let catalog = discover(paths)?;
-    let artifact = catalog
-        .find(selector)
-        .ok_or_else(|| format!("source content is no longer available in this workspace: {selector}"))?;
-    let root = fs::canonicalize(paths.source().root())
-        .map_err(io("resolve source workspace", paths.source().root()))?;
-    let metadata = fs::symlink_metadata(artifact.manifest())
-        .map_err(io("inspect content manifest", artifact.manifest()))?;
-    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
-        return Err(format!("content manifest must be a regular file: {}", artifact.manifest().display()));
-    }
-    let manifest = fs::canonicalize(artifact.manifest())
-        .map_err(io("resolve content manifest", artifact.manifest()))?;
-    if !manifest.starts_with(&root) {
-        return Err("content manifest resolves outside the selected workspace".to_owned());
-    }
-    let source = fs::read_to_string(&manifest).map_err(io("read content manifest", &manifest))?;
+    let (artifact, manifest, source) = load_source_manifest_snapshot(paths, selector)?;
     Ok(SourceComposition {
         id: artifact.id().to_owned(),
         version: artifact.version().map(ToOwned::to_owned),
@@ -1882,19 +1878,6 @@ pub fn save_source_composition(
     if current.source != expected_source {
         return Err("content manifest changed on disk since it was opened; reload it before saving".to_owned());
     }
-    let lock_path = current.manifest.with_extension("vapor-edit.lock");
-    let lock_file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&lock_path)
-        .map_err(|error| format!("cannot acquire composition edit lock '{}': {error}", lock_path.display()))?;
-    let lock = SourceManifestEditLock { path: lock_path, file: Some(lock_file) };
-    let locked_source = fs::read_to_string(&current.manifest)
-        .map_err(io("re-read content manifest", &current.manifest))?;
-    if locked_source != expected_source {
-        return Err("content manifest changed while the edit was being prepared; reload it before saving".to_owned());
-    }
-
     let catalog = discover(paths)?;
     let root = catalog.find(selector)
         .ok_or_else(|| format!("source content is no longer available in this workspace: {selector}"))?;
@@ -1983,47 +1966,13 @@ pub fn save_source_composition(
         role_table.insert("dependencies", toml_edit::Item::ArrayOfTables(dependencies));
     }
     let updated = document.to_string();
-    // Confirm the new authored graph is parseable and discoverable before replacing the source.
-    let temporary = source_manifest_temp_path(&current.manifest);
-    if let Err(error) = write_source_manifest_temp(&temporary, &updated, &current.manifest) {
-        let _ = fs::remove_file(&temporary);
-        return Err(error);
-    }
-    let backup = source_manifest_temp_path_with_suffix(&current.manifest, "backup");
-    if let Err(error) = fs::rename(&current.manifest, &backup) {
-        let _ = fs::remove_file(&temporary);
-        return Err(io("prepare content manifest replacement", &current.manifest)(error));
-    }
-    if let Err(error) = fs::rename(&temporary, &current.manifest) {
-        let restore = fs::rename(&backup, &current.manifest);
-        let _ = fs::remove_file(&temporary);
-        return Err(match restore {
-            Ok(()) => io("replace content manifest", &current.manifest)(error),
-            Err(restore) => format!("failed to replace content manifest: {error}; recovery failed: {restore}"),
-        });
-    }
-    if let Err(error) = discover(paths) {
-        let _ = fs::remove_file(&current.manifest);
-        let restore = fs::rename(&backup, &current.manifest);
-        return Err(match restore {
-            Ok(()) => format!("new content graph could not be discovered: {error}; original manifest restored"),
-            Err(restore) => format!("new content graph could not be discovered: {error}; recovery failed: {restore}"),
-        });
-    }
-    let saved = match load_source_composition(paths, selector) {
-        Ok(saved) => saved,
-        Err(error) => {
-            let _ = fs::remove_file(&current.manifest);
-            let restore = fs::rename(&backup, &current.manifest);
-            return Err(match restore {
-                Ok(()) => format!("saved content graph could not be reopened: {error}; original manifest restored"),
-                Err(restore) => format!("saved content graph could not be reopened: {error}; recovery failed: {restore}"),
-            });
-        }
-    };
-    let _ = fs::remove_file(&backup);
-    drop(lock);
-    Ok(saved)
+    replace_source_manifest(
+        &current.manifest,
+        expected_source,
+        &updated,
+        "content graph",
+        || load_source_composition(paths, selector),
+    )
 }
 
 /// Load the authored Workshop policy and exact source snapshot for a content project.
@@ -2031,23 +1980,7 @@ pub fn load_source_workshop_metadata(
     paths: &EnvironmentPaths,
     selector: &str,
 ) -> Result<SourceWorkshopMetadata, String> {
-    let catalog = discover(paths)?;
-    let artifact = catalog
-        .find(selector)
-        .ok_or_else(|| format!("content is no longer available in this workspace: {selector}"))?;
-    let root = fs::canonicalize(paths.source().root())
-        .map_err(io("resolve source workspace", paths.source().root()))?;
-    let metadata = fs::symlink_metadata(artifact.manifest())
-        .map_err(io("inspect content manifest", artifact.manifest()))?;
-    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
-        return Err(format!("content manifest must be a regular file: {}", artifact.manifest().display()));
-    }
-    let manifest = fs::canonicalize(artifact.manifest())
-        .map_err(io("resolve content manifest", artifact.manifest()))?;
-    if !manifest.starts_with(&root) {
-        return Err("content manifest resolves outside the selected workspace".to_owned());
-    }
-    let source = fs::read_to_string(&manifest).map_err(io("read content manifest", &manifest))?;
+    let (artifact, manifest, source) = load_source_manifest_snapshot(paths, selector)?;
     let policy = artifact.workshop();
     Ok(SourceWorkshopMetadata {
         id: artifact.id().to_owned(),
@@ -2067,6 +2000,151 @@ pub fn load_source_workshop_metadata(
     })
 }
 
+/// Load the typed runtime output declarations and exact source snapshot.
+pub fn load_source_runtime_outputs(
+    paths: &EnvironmentPaths,
+    selector: &str,
+) -> Result<SourceRuntimeOutputs, String> {
+    let (artifact, manifest, source) = load_source_manifest_snapshot(paths, selector)?;
+    Ok(SourceRuntimeOutputs {
+        id: artifact.id().to_owned(),
+        version: artifact.version().map(ToOwned::to_owned),
+        kind: artifact.kind().to_string(),
+        manifest,
+        source,
+        binaries: artifact.binaries().to_vec(),
+        libraries: artifact.libraries().to_vec(),
+    })
+}
+
+/// Save runtime output declarations through the shared guarded manifest writer.
+pub fn save_source_runtime_outputs(
+    paths: &EnvironmentPaths,
+    selector: &str,
+    expected_source: &str,
+    binaries: &[String],
+    libraries: &[String],
+) -> Result<SourceRuntimeOutputs, String> {
+    let current = load_source_runtime_outputs(paths, selector)?;
+    if current.source != expected_source {
+        return Err("content manifest changed on disk since it was opened; reload before saving".to_owned());
+    }
+    validate_runtime_output_names("binaries", binaries)?;
+    validate_runtime_output_names("libraries", libraries)?;
+    let mut document = expected_source
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|error| format!("content manifest is not valid TOML: {error}"))?;
+    let role = &current.kind;
+    let role_table = document
+        .get_mut(role.as_str())
+        .and_then(toml_edit::Item::as_table_mut)
+        .ok_or_else(|| format!("content manifest has no [{role}] table"))?;
+    set_string_array(role_table, "binaries", binaries);
+    set_string_array(role_table, "libraries", libraries);
+    let updated = document.to_string();
+    replace_source_manifest(
+        &current.manifest,
+        expected_source,
+        &updated,
+        "runtime output declarations",
+        || load_source_runtime_outputs(paths, selector),
+    )
+}
+
+fn load_source_manifest_snapshot(
+    paths: &EnvironmentPaths,
+    selector: &str,
+) -> Result<(ContentArtifact, PathBuf, String), String> {
+    let catalog = discover(paths)?;
+    let artifact = catalog
+        .find(selector)
+        .cloned()
+        .ok_or_else(|| format!("source content is no longer available in this workspace: {selector}"))?;
+    let root = fs::canonicalize(paths.source().root())
+        .map_err(io("resolve source workspace", paths.source().root()))?;
+    let metadata = fs::symlink_metadata(artifact.manifest())
+        .map_err(io("inspect content manifest", artifact.manifest()))?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(format!("content manifest must be a regular file: {}", artifact.manifest().display()));
+    }
+    let manifest = fs::canonicalize(artifact.manifest())
+        .map_err(io("resolve content manifest", artifact.manifest()))?;
+    if !manifest.starts_with(&root) {
+        return Err("content manifest resolves outside the selected workspace".to_owned());
+    }
+    let source = fs::read_to_string(&manifest).map_err(io("read content manifest", &manifest))?;
+    Ok((artifact, manifest, source))
+}
+
+fn replace_source_manifest<T>(
+    manifest: &Path,
+    expected_source: &str,
+    updated_source: &str,
+    subject: &str,
+    reopen: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let lock_path = manifest.with_extension("vapor-edit.lock");
+    let lock_file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&lock_path)
+        .map_err(|error| format!("cannot acquire content manifest edit lock '{}': {error}", lock_path.display()))?;
+    let _lock = SourceManifestEditLock { path: lock_path, file: Some(lock_file) };
+    let locked_source = fs::read_to_string(manifest)
+        .map_err(io("re-read content manifest", manifest))?;
+    if locked_source != expected_source {
+        return Err("content manifest changed while the edit was being prepared; reload before saving".to_owned());
+    }
+    let temporary = source_manifest_temp_path(manifest);
+    if let Err(error) = write_source_manifest_temp(&temporary, updated_source, manifest) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    let backup = source_manifest_temp_path_with_suffix(manifest, "backup");
+    if let Err(error) = fs::rename(manifest, &backup) {
+        let _ = fs::remove_file(&temporary);
+        return Err(io("prepare content manifest replacement", manifest)(error));
+    }
+    if let Err(error) = fs::rename(&temporary, manifest) {
+        let restore = fs::rename(&backup, manifest);
+        let _ = fs::remove_file(&temporary);
+        return Err(match restore {
+            Ok(()) => io("replace content manifest", manifest)(error),
+            Err(restore) => format!("failed to replace content manifest: {error}; recovery failed: {restore}"),
+        });
+    }
+    let reopened = reopen()
+        .map_err(|error| format!("updated {subject} could not be discovered or reopened: {error}"));
+    match reopened {
+        Ok(value) => {
+            let _ = fs::remove_file(&backup);
+            Ok(value)
+        }
+        Err(error) => {
+            let _ = fs::remove_file(manifest);
+            Err(match fs::rename(&backup, manifest) {
+                Ok(()) => format!("updated {subject} could not be reopened: {error}; original manifest restored"),
+                Err(restore) => format!("updated {subject} could not be reopened: {error}; recovery failed: {restore}"),
+            })
+        }
+    }
+}
+
+fn set_string_array(table: &mut toml_edit::Table, key: &str, values: &[String]) {
+    if values.is_empty() {
+        table.remove(key);
+        return;
+    }
+    let mut array = toml_edit::Array::new();
+    for value in values {
+        array.push(value.as_str());
+    }
+    table.insert(
+        key,
+        toml_edit::Item::Value(toml_edit::Value::Array(array)),
+    );
+}
+
 /// Save Workshop policy through a stale-snapshot-checked, atomic manifest replacement.
 pub fn save_source_workshop_metadata(
     paths: &EnvironmentPaths,
@@ -2079,18 +2157,6 @@ pub fn save_source_workshop_metadata(
         return Err("content manifest changed on disk since it was opened; reload before saving".to_owned());
     }
     validate_workshop_policy_draft(policy)?;
-    let lock_path = current.manifest.with_extension("vapor-edit.lock");
-    let lock_file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&lock_path)
-        .map_err(|error| format!("cannot acquire content manifest edit lock '{}': {error}", lock_path.display()))?;
-    let _lock = SourceManifestEditLock { path: lock_path, file: Some(lock_file) };
-    let locked_source = fs::read_to_string(&current.manifest)
-        .map_err(io("re-read content manifest", &current.manifest))?;
-    if locked_source != expected_source {
-        return Err("content manifest changed while the edit was being prepared; reload before saving".to_owned());
-    }
     let mut document = expected_source
         .parse::<toml_edit::DocumentMut>()
         .map_err(|error| format!("content manifest is not valid TOML: {error}"))?;
@@ -2124,46 +2190,13 @@ pub fn save_source_workshop_metadata(
     set_optional_toml_value(steam, "change-note", policy.change_note.as_deref().map(toml_edit::value));
     let remove_steam_table = steam.is_empty();
     if remove_steam_table { role_table.remove("steam"); }
-    let updated = document.to_string();
-    let temporary = source_manifest_temp_path(&current.manifest);
-    if let Err(error) = write_source_manifest_temp(&temporary, &updated, &current.manifest) {
-        let _ = fs::remove_file(&temporary);
-        return Err(error);
-    }
-    let backup = source_manifest_temp_path_with_suffix(&current.manifest, "backup");
-    if let Err(error) = fs::rename(&current.manifest, &backup) {
-        let _ = fs::remove_file(&temporary);
-        return Err(io("prepare content manifest replacement", &current.manifest)(error));
-    }
-    if let Err(error) = fs::rename(&temporary, &current.manifest) {
-        let restore = fs::rename(&backup, &current.manifest);
-        let _ = fs::remove_file(&temporary);
-        return Err(match restore {
-            Ok(()) => io("replace content manifest", &current.manifest)(error),
-            Err(restore) => format!("failed to replace content manifest: {error}; recovery failed: {restore}"),
-        });
-    }
-    if let Err(error) = discover(paths) {
-        let _ = fs::remove_file(&current.manifest);
-        let restore = fs::rename(&backup, &current.manifest);
-        return Err(match restore {
-            Ok(()) => format!("updated content manifest could not be discovered: {error}; original manifest restored"),
-            Err(restore) => format!("updated content manifest could not be discovered: {error}; recovery failed: {restore}"),
-        });
-    }
-    let saved = match load_source_workshop_metadata(paths, selector) {
-        Ok(saved) => saved,
-        Err(error) => {
-            let _ = fs::remove_file(&current.manifest);
-            let restore = fs::rename(&backup, &current.manifest);
-            return Err(match restore {
-                Ok(()) => format!("saved Workshop metadata could not be reopened: {error}; original manifest restored"),
-                Err(restore) => format!("saved Workshop metadata could not be reopened: {error}; recovery failed: {restore}"),
-            });
-        }
-    };
-    let _ = fs::remove_file(&backup);
-    Ok(saved)
+    replace_source_manifest(
+        &current.manifest,
+        expected_source,
+        &document.to_string(),
+        "Workshop metadata",
+        || load_source_workshop_metadata(paths, selector),
+    )
 }
 
 fn set_optional_toml_value(table: &mut toml_edit::Table, key: &str, value: Option<toml_edit::Item>) {
