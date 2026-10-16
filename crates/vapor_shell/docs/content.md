@@ -50,6 +50,10 @@ in the unregistered-project scan and can be adopted again.
 Creation, adoption, and unregistration serialize edits to the Workspace project
 registry through one edit lock. Creation also checks that the Cargo and Workspace
 manifests still match the snapshots it used before registering a new project.
+Each manifest replacement uses a same-directory temporary and recovery copy;
+on a reported failure creation attempts to restore both original snapshots and
+remove the incomplete project. If the process stops between those two manifest
+updates, the authored folder remains discoverable by Find projects / Adopt.
 
 When `content package` stages an artifact, Vapor writes a resolved deployed
 role-specific manifest into the artifact root and copies declared runtime

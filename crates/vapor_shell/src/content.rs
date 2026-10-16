@@ -1646,8 +1646,6 @@ pub fn create_source_project_with_workshop(
         return Err(io("create content project directory", &output)(error));
     }
     let manifest_path = output.join(kind.manifest_file_name());
-    let mut cargo_touched = false;
-    let mut workspace_touched = false;
     let create_result = (|| -> Result<(), String> {
         let template = crate::source::scaffold_content_project(
             &output,
@@ -1688,32 +1686,82 @@ pub fn create_source_project_with_workshop(
         if current_cargo != original_cargo {
             return Err("Cargo workspace manifest changed while content was being prepared; retry the action".to_owned());
         }
-        cargo_touched = true;
-        fs::write(&cargo_manifest, &updated_cargo)
-            .map_err(io("register Cargo workspace member", &cargo_manifest))?;
-        workspace_touched = true;
-        fs::write(&workspace_manifest, &updated_workspace)
-            .map_err(io("register Vapor content project", &workspace_manifest))?;
-        WorkspaceManifest::load(paths)?;
-        vapor_core::VaporWorkspace::load(root).map_err(|error| error.to_string())?;
-        discover(paths)?;
+        replace_source_manifest(
+            &cargo_manifest,
+            &original_cargo,
+            &updated_cargo,
+            "Cargo workspace membership",
+            || {
+                WorkspaceManifest::load(paths)?;
+                vapor_core::VaporWorkspace::load(root).map_err(|error| error.to_string())?;
+                Ok(())
+            },
+        )?;
+        replace_workspace_manifest_locked(
+            &workspace_manifest,
+            &original_workspace,
+            &updated_workspace,
+            "content project registration",
+            || {
+                WorkspaceManifest::load(paths)?;
+                vapor_core::VaporWorkspace::load(root).map_err(|error| error.to_string())?;
+                discover(paths)?;
+                Ok(())
+            },
+        )?;
         Ok(())
     })();
     if let Err(error) = create_result {
         let mut recovery = Vec::new();
-        if workspace_touched
-            && let Err(restore_error) = fs::write(&workspace_manifest, &original_workspace)
-        {
-            recovery.push(format!(
-                "could not restore {}: {restore_error}",
+        match fs::read_to_string(&workspace_manifest) {
+            Ok(current) if current == updated_workspace => {
+                if let Err(restore_error) = replace_workspace_manifest_locked(
+                    &workspace_manifest,
+                    &updated_workspace,
+                    &original_workspace,
+                    "content project registration rollback",
+                    || Ok(()),
+                ) {
+                    recovery.push(format!(
+                        "could not restore {}: {restore_error}",
+                        workspace_manifest.display()
+                    ));
+                }
+            }
+            Ok(current) if current == original_workspace => {}
+            Ok(_) => recovery.push(format!(
+                "{} changed during recovery and was left untouched",
                 workspace_manifest.display()
-            ));
+            )),
+            Err(error) => recovery.push(format!(
+                "could not inspect {} during recovery: {error}",
+                workspace_manifest.display()
+            )),
         }
-        if cargo_touched && let Err(restore_error) = fs::write(&cargo_manifest, &original_cargo) {
-            recovery.push(format!(
-                "could not restore {}: {restore_error}",
+        match fs::read_to_string(&cargo_manifest) {
+            Ok(current) if current == updated_cargo => {
+                if let Err(restore_error) = replace_source_manifest(
+                    &cargo_manifest,
+                    &updated_cargo,
+                    &original_cargo,
+                    "Cargo workspace membership rollback",
+                    || Ok(()),
+                ) {
+                    recovery.push(format!(
+                        "could not restore {}: {restore_error}",
+                        cargo_manifest.display()
+                    ));
+                }
+            }
+            Ok(current) if current == original_cargo => {}
+            Ok(_) => recovery.push(format!(
+                "{} changed during recovery and was left untouched",
                 cargo_manifest.display()
-            ));
+            )),
+            Err(error) => recovery.push(format!(
+                "could not inspect {} during recovery: {error}",
+                cargo_manifest.display()
+            )),
         }
         if let Err(cleanup_error) = fs::remove_dir_all(&output) {
             recovery.push(format!(
@@ -1910,6 +1958,22 @@ fn replace_workspace_manifest<T>(
     validate: impl FnOnce() -> Result<T, String>,
 ) -> Result<T, String> {
     let _lock = acquire_workspace_project_lock(manifest_path)?;
+    replace_workspace_manifest_locked(
+        manifest_path,
+        expected_source,
+        updated_source,
+        action,
+        validate,
+    )
+}
+
+fn replace_workspace_manifest_locked<T>(
+    manifest_path: &Path,
+    expected_source: &str,
+    updated_source: &str,
+    action: &str,
+    validate: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
     let current = fs::read_to_string(manifest_path)
         .map_err(io("re-read Workspace manifest", manifest_path))?;
     if current != expected_source {
