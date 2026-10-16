@@ -1527,6 +1527,128 @@ pub fn create_source_project(
     Ok(manifest_path)
 }
 
+/// Register an existing in-workspace content project without moving its files.
+pub fn adopt_source_project(paths: &EnvironmentPaths, project_path: &Path) -> Result<String, String> {
+    let workspace = WorkspaceManifest::load(paths)?;
+    if workspace.kind() != crate::workspace::SourceRootKind::Workspace {
+        return Err("content projects can only be adopted into a Vapor Workspace".to_owned());
+    }
+    if project_path.as_os_str().is_empty() || project_path.is_absolute()
+        || project_path.components().any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err("project path must be a non-empty relative path inside the Workspace".to_owned());
+    }
+
+    let source_root = fs::canonicalize(paths.source().root())
+        .map_err(io("resolve source workspace", paths.source().root()))?;
+    let requested_root = source_root.join(project_path);
+    let metadata = fs::symlink_metadata(&requested_root)
+        .map_err(io("inspect project folder", &requested_root))?;
+    if !metadata.file_type().is_dir() {
+        return Err(format!("project path must name a regular directory: {}", project_path.display()));
+    }
+    let project_root = fs::canonicalize(&requested_root)
+        .map_err(io("resolve project folder", &requested_root))?;
+    if !project_root.starts_with(&source_root) {
+        return Err("project folder resolves outside the selected Workspace".to_owned());
+    }
+    let marker = manifest::content_marker_at(&project_root)
+        .ok_or_else(|| format!("no role-specific Vapor content manifest found in {}", project_path.display()))?;
+    let marker_metadata = fs::symlink_metadata(&marker).map_err(io("inspect content manifest", &marker))?;
+    if !marker_metadata.file_type().is_file() || marker_metadata.file_type().is_symlink() {
+        return Err(format!("content manifest must be a regular non-symlink file: {}", marker.display()));
+    }
+    let (id, kind) = match manifest::read(&marker, &source_root)? {
+        VaporEntity::Content { id, kind, .. } => (id, kind),
+        _ => return Err(format!("{} is not a content project manifest", marker.display())),
+    };
+    if workspace.projects().iter().any(|project| project.path() == project_path || project.id() == id) {
+        return Err(format!("content project is already registered: {id}"));
+    }
+
+    let workspace_manifest = source_root.join(manifest::WORKSPACE_FILE_NAME);
+    let workspace_metadata = fs::symlink_metadata(&workspace_manifest)
+        .map_err(io("inspect Workspace manifest", &workspace_manifest))?;
+    if !workspace_metadata.file_type().is_file() || workspace_metadata.file_type().is_symlink() {
+        return Err(format!("Workspace manifest must be a regular non-symlink file: {}", workspace_manifest.display()));
+    }
+    let original = fs::read_to_string(&workspace_manifest)
+        .map_err(io("read Workspace manifest", &workspace_manifest))?;
+    let lock_path = workspace_manifest.with_file_name(".Workspace.vapor-project.lock");
+    let lock_file = fs::OpenOptions::new().write(true).create_new(true).open(&lock_path)
+        .map_err(|error| format!("cannot acquire Workspace edit lock '{}': {error}", lock_path.display()))?;
+    let lock = CompositionEditLock { path: lock_path, file: Some(lock_file) };
+    let current = fs::read_to_string(&workspace_manifest)
+        .map_err(io("re-read Workspace manifest", &workspace_manifest))?;
+    if current != original {
+        return Err("Workspace manifest changed while project adoption was being prepared; retry the action".to_owned());
+    }
+
+    let relative_project = project_root.strip_prefix(&source_root)
+        .map_err(|error| format!("project folder is outside the Workspace: {error}"))?;
+    let relative_project = relative_project.components().map(|component| component.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>().join("/");
+    let mut document = original.parse::<toml_edit::DocumentMut>()
+        .map_err(|error| format!("Workspace manifest is not valid TOML: {error}"))?;
+    let workspace_table = document.get_mut("workspace").and_then(toml_edit::Item::as_table_mut)
+        .ok_or_else(|| "Workspace manifest has no [workspace] table".to_owned())?;
+    match workspace_table.get_mut("projects") {
+        Some(toml_edit::Item::ArrayOfTables(projects)) => {
+            let mut project = toml_edit::Table::new();
+            project.insert("path", toml_edit::value(relative_project));
+            projects.push(project);
+        }
+        Some(_) => return Err("workspace.projects must be an array of tables".to_owned()),
+        None => {
+            let mut projects = toml_edit::ArrayOfTables::new();
+            let mut project = toml_edit::Table::new();
+            project.insert("path", toml_edit::value(relative_project));
+            projects.push(project);
+            workspace_table.insert("projects", toml_edit::Item::ArrayOfTables(projects));
+        }
+    }
+
+    let temporary = composition_temp_path(&workspace_manifest);
+    let updated = document.to_string();
+    if let Err(error) = write_composition_temp(&temporary, &updated, &workspace_manifest) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    let backup = composition_temp_path_with_suffix(&workspace_manifest, "backup");
+    if let Err(error) = fs::rename(&workspace_manifest, &backup) {
+        let _ = fs::remove_file(&temporary);
+        return Err(io("prepare Workspace manifest replacement", &workspace_manifest)(error));
+    }
+    if let Err(error) = fs::rename(&temporary, &workspace_manifest) {
+        let restore = fs::rename(&backup, &workspace_manifest);
+        let _ = fs::remove_file(&temporary);
+        return Err(match restore {
+            Ok(()) => io("replace Workspace manifest", &workspace_manifest)(error),
+            Err(restore) => format!("failed to register content project: {error}; recovery failed: {restore}"),
+        });
+    }
+
+    let validation = (|| {
+        WorkspaceManifest::load(paths)?;
+        vapor_core::VaporWorkspace::load(&source_root).map_err(|error| error.to_string())?;
+        let catalog = discover(paths)?;
+        if !catalog.artifacts().iter().any(|artifact| artifact.id() == id && artifact.kind() == kind) {
+            return Err(format!("adopted content project {id} is not visible after registration"));
+        }
+        Ok(())
+    })();
+    if let Err(error) = validation {
+        let _ = fs::remove_file(&workspace_manifest);
+        return Err(match fs::rename(&backup, &workspace_manifest) {
+            Ok(()) => format!("content project registration failed validation: {error}; original Workspace manifest restored"),
+            Err(restore) => format!("content project registration failed validation: {error}; recovery failed: {restore}"),
+        });
+    }
+    let _ = fs::remove_file(&backup);
+    drop(lock);
+    Ok(format!("Registered {kind} content {id} from {}.", project_path.display()))
+}
+
 /// Load the editable dependency graph for a locally authored Packagepack.
 pub fn load_source_composition(
     paths: &EnvironmentPaths,
