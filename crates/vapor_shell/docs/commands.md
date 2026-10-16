@@ -186,9 +186,11 @@ tests, strict Clippy, and strict Rustdoc.
 ### `source init basic-content PATH --organization ORG --name NAME [--app-id APPID]`
 
 Create a new source workspace with a basic engine, game, and packagepack. The
-target path must be empty or absent. The generated workspace is ordinary source:
-`Workspace.vapor.toml` declares `[workspace]` and `[[workspace.projects]]`,
-child role manifests own content metadata, and Cargo owns Rust compilation.
+target path must be empty or absent. The generated workspace includes the
+managed toolchain pin and Cargo-root `[[project]]` entries. Its nested
+`[workspace].projects` content registry includes all three roles, while only
+the code-bearing Engine and Game are Cargo packages; Packagepack is metadata
+only.
 
 If `--app-id` is omitted, Vapor uses the installed app's `[root.steam].app-id`.
 After creation, Vapor opens the new source root.
