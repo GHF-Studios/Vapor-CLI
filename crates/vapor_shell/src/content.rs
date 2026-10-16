@@ -1265,6 +1265,138 @@ impl WorkshopOperationReport {
     }
 }
 
+/// One valid, unregistered content project that may be explicitly adopted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceProjectCandidate {
+    pub path: PathBuf,
+    pub id: String,
+    pub kind: ContentKind,
+}
+
+/// Candidates found by a non-mutating project scan. Invalid folders are
+/// returned as diagnostics and never enter the content catalog.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SourceProjectScan {
+    pub candidates: Vec<SourceProjectCandidate>,
+    pub diagnostics: Vec<String>,
+}
+
+/// Find unregistered content folders for an explicit creator adoption action.
+pub fn scan_unregistered_source_projects(paths: &EnvironmentPaths) -> Result<SourceProjectScan, String> {
+    let workspace = WorkspaceManifest::load(paths)?;
+    if workspace.kind() != crate::workspace::SourceRootKind::Workspace {
+        return Err("content projects can only be discovered inside a Vapor Workspace".to_owned());
+    }
+    let source_root = fs::canonicalize(paths.source().root())
+        .map_err(io("resolve source workspace", paths.source().root()))?;
+    workspace_version(&source_root)?;
+    let registered_ids = workspace.projects().iter().map(|project| project.id().to_owned())
+        .collect::<BTreeSet<_>>();
+    let registered_paths = workspace.projects().iter()
+        .filter_map(|project| fs::canonicalize(source_root.join(project.path())).ok())
+        .collect::<BTreeSet<_>>();
+    let mut scan = SourceProjectScan::default();
+    let mut pending = vec![source_root.clone()];
+    let mut candidates_by_id = BTreeMap::<String, SourceProjectCandidate>::new();
+    let mut duplicate_ids = BTreeSet::new();
+    let mut visited = 0usize;
+    while let Some(directory) = pending.pop() {
+        visited += 1;
+        if visited > 100_000 {
+            scan.diagnostics.push("Stopped scanning after 100,000 folders; narrow the Workspace or move generated files under an excluded folder.".to_owned());
+            break;
+        }
+        let mut entries = Vec::new();
+        match fs::read_dir(&directory) {
+            Ok(directory_entries) => {
+                for entry in directory_entries {
+                    match entry {
+                        Ok(entry) => entries.push(entry),
+                        Err(error) => scan.diagnostics.push(format!(
+                            "Could not inspect an entry in {}: {error}", directory.display()
+                        )),
+                    }
+                }
+            }
+            Err(error) => {
+                scan.diagnostics.push(format!("Could not inspect {}: {error}", directory.display()));
+                continue;
+            }
+        }
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries.into_iter().rev() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with('.') || matches!(name.as_ref(), "target" | "node_modules" | "vendor" | "output") {
+                continue;
+            }
+            let file_type = match entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(error) => {
+                    scan.diagnostics.push(format!("Could not inspect {}: {error}", entry.path().display()));
+                    continue;
+                }
+            };
+            if !file_type.is_dir() {
+                continue;
+            }
+            let path = match fs::canonicalize(entry.path()) {
+                Ok(path) if path.starts_with(&source_root) => path,
+                Ok(_) => continue,
+                Err(error) => {
+                    scan.diagnostics.push(format!("Could not resolve {}: {error}", entry.path().display()));
+                    continue;
+                }
+            };
+            if registered_paths.contains(&path) {
+                continue;
+            }
+            if let Some(marker) = manifest::content_marker_at(&path) {
+                let marker_metadata = fs::symlink_metadata(&marker);
+                let entity = match marker_metadata {
+                    Ok(metadata) if metadata.file_type().is_file() && !metadata.file_type().is_symlink() =>
+                        manifest::read(&marker, &source_root),
+                    Ok(_) => Err(format!("content manifest must be a regular non-symlink file: {}", marker.display())),
+                    Err(error) => Err(format!("could not inspect {}: {error}", marker.display())),
+                };
+                match entity {
+                    Ok(VaporEntity::Content { id, kind, .. }) if !registered_ids.contains(&id) => {
+                        match read_authored_content(&marker, kind) {
+                            Ok(_) => match path.strip_prefix(&source_root).ok().and_then(Path::to_str) {
+                                Some(relative) => {
+                                    let candidate = SourceProjectCandidate {
+                                        path: PathBuf::from(relative),
+                                        id: id.clone(),
+                                        kind,
+                                    };
+                                    if candidates_by_id.insert(id.clone(), candidate).is_some() {
+                                        duplicate_ids.insert(id.clone());
+                                    }
+                                }
+                                None => scan.diagnostics.push(format!("Project path is not valid Unicode and cannot be written to the Workspace manifest: {}", path.display())),
+                            },
+                            Err(error) => scan.diagnostics.push(error),
+                        }
+                    }
+                    Ok(VaporEntity::Content { id, .. }) => scan.diagnostics.push(format!("{} duplicates registered content identity {id}", path.display())),
+                    Ok(_) => scan.diagnostics.push(format!("{} is not a content project", marker.display())),
+                    Err(error) => scan.diagnostics.push(error),
+                }
+                continue;
+            }
+            pending.push(path);
+        }
+    }
+    for id in duplicate_ids {
+        candidates_by_id.remove(&id);
+        scan.diagnostics.push(format!("More than one unregistered folder declares content identity {id}; resolve the duplicate before adoption."));
+    }
+    scan.candidates = candidates_by_id.into_values().collect();
+    scan.candidates.sort_by(|left, right| left.path.cmp(&right.path));
+    scan.diagnostics.sort();
+    Ok(scan)
+}
+
 /// Discover source-authored content artifacts in the active workspace.
 ///
 /// # Errors
