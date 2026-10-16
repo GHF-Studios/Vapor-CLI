@@ -124,7 +124,7 @@ pub enum VaporEntity {
         /// Owning organization namespace.
         organization: String,
     },
-    /// One content Cargo package inside a source root.
+    /// One source-authored content project inside a workspace.
     Content {
         /// Canonical content category.
         kind: ContentKind,

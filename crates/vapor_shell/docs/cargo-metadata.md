@@ -22,9 +22,10 @@ app root/
 Cargo workspace; its direct submodules that declare `[workspace]` and contain
 `Cargo.toml` are routed as Cargo workspaces.
 
-Inside a Cargo workspace, role-specific content manifests describe Vapor
-content packages. Ordinary non-content crates are described by Cargo only. They
-are not standalone source roots.
+Inside a Vapor workspace, role-specific content manifests describe Vapor
+content projects. A code-bearing project may also be a Cargo package; a
+composition-only project need not be. Ordinary non-content crates are described
+by Cargo only and are not standalone source roots.
 
 ## Separate authorities
 

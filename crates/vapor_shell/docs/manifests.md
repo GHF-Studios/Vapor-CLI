@@ -165,12 +165,14 @@ x86_64-unknown-linux-gnu = ["libsteam_api.so"]
 x86_64-pc-windows-gnullvm = ["steam_api64.dll"]
 ```
 
-## Content packages
+## Content projects
 
-Every source-authored Vapor content artifact is normally a Cargo package inside
-a Vapor workspace. Ordinary non-content crates are owned by Cargo only; they do
-not need their own Vapor manifest. Content packages use their content role and
-must use the matching filename:
+Every source-authored Vapor content artifact is registered in its Vapor
+workspace and uses a role-specific manifest. Code-bearing Engine, Game, and
+mod projects are also Cargo packages; Packagepack, Enginepack, Gamepack, and
+Modpack projects are metadata-only and do not create Cargo members. Ordinary
+non-content crates are owned by Cargo only and do not need a Vapor manifest.
+Content projects use their role and matching filename:
 
 ```toml
 schema = 1
@@ -383,8 +385,8 @@ name = "loo-cast-game"
 name = "campaign-expansion"
 ```
 
-This is rejected at a source root because content belongs in a Cargo package
-directory, not as the source-root identity:
+This is rejected at a source root because content belongs in a registered
+workspace project directory, not as the source-root identity:
 
 ```toml
 [engine]

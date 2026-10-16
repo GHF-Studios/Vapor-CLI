@@ -83,9 +83,12 @@ pub(crate) enum GeneratedOutputKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct GeneratedContentProject {
-    pub(crate) crate_name: String,
-    pub(crate) output: Option<GeneratedOutputKind>,
+pub(crate) enum GeneratedContentProject {
+    Rust {
+        crate_name: String,
+        output: GeneratedOutputKind,
+    },
+    MetadataOnly,
 }
 
 impl SourceRepairReport {
@@ -558,16 +561,41 @@ crate-type = ["{crate_type}"]
     write(path, &source)
 }
 
-/// Add the minimal Rust package every registered Vapor workspace project needs.
-/// Engine, Game, and mod roles also declare the runtime artifact they produce.
+/// Add the Rust source project for code-bearing content roles. Composition-only
+/// roles intentionally contain no Cargo package or empty Rust placeholder.
 pub(crate) fn scaffold_content_project(
     root: &Path,
     content_id: &str,
     version: &str,
     kind: ContentKind,
 ) -> Result<GeneratedContentProject, String> {
+    let output = content_project_output(kind);
+    let Some(output) = output else {
+        return Ok(GeneratedContentProject::MetadataOnly);
+    };
     let crate_name = format!("vapor_{}", content_id.replace(['/', '-'], "_"));
-    let output = match kind {
+    let mut cargo = format!(
+        "[package]\nname = \"{crate_name}\"\nversion = \"{version}\"\nedition = \"2024\"\n"
+    );
+    if output == GeneratedOutputKind::Library {
+        cargo.push_str("\n[lib]\ncrate-type = [\"rlib\", \"cdylib\"]\n");
+    }
+    write(&root.join("Cargo.toml"), &cargo)?;
+    match output {
+        GeneratedOutputKind::Binary => write(
+            &root.join("src/main.rs"),
+            &format!("fn main() {{ println!(\"Vapor Engine {content_id}\"); }}\n"),
+        )?,
+        GeneratedOutputKind::Library => write(
+            &root.join("src/lib.rs"),
+            &format!("#![forbid(unsafe_code)]\n\npub const CONTENT_ID: &str = \"{content_id}\";\n"),
+        )?,
+    }
+    Ok(GeneratedContentProject::Rust { crate_name, output })
+}
+
+pub(crate) fn content_project_output(kind: ContentKind) -> Option<GeneratedOutputKind> {
+    match kind {
         ContentKind::Engine => Some(GeneratedOutputKind::Binary),
         ContentKind::Game
         | ContentKind::EngineMod
@@ -577,25 +605,7 @@ pub(crate) fn scaffold_content_project(
         | ContentKind::Enginepack
         | ContentKind::Gamepack
         | ContentKind::Modpack => None,
-    };
-    let mut cargo = format!(
-        "[package]\nname = \"{crate_name}\"\nversion = \"{version}\"\nedition = \"2024\"\n"
-    );
-    if output == Some(GeneratedOutputKind::Library) {
-        cargo.push_str("\n[lib]\ncrate-type = [\"rlib\", \"cdylib\"]\n");
     }
-    write(&root.join("Cargo.toml"), &cargo)?;
-    match output {
-        Some(GeneratedOutputKind::Binary) => write(
-            &root.join("src/main.rs"),
-            &format!("fn main() {{ println!(\"Vapor Engine {content_id}\"); }}\n"),
-        )?,
-        Some(GeneratedOutputKind::Library) | None => write(
-            &root.join("src/lib.rs"),
-            &format!("#![forbid(unsafe_code)]\n\npub const CONTENT_ID: &str = \"{content_id}\";\n"),
-        )?,
-    }
-    Ok(GeneratedContentProject { crate_name, output })
 }
 
 fn validate_slug(label: &str, value: &str) -> Result<(), String> {

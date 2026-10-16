@@ -1599,10 +1599,15 @@ pub fn create_source_project_with_workshop(
         "{}\n\n[[workspace.projects]]\npath = \"content/{name}\"\n",
         original_workspace.trim_end(),
     );
-    let cargo_manifest = root.join("Cargo.toml");
-    let original_cargo = fs::read_to_string(&cargo_manifest)
-        .map_err(io("read Cargo workspace manifest", &cargo_manifest))?;
-    let updated_cargo = cargo_workspace_with_member(&original_cargo, &relative_root)?;
+    let cargo_transaction = if crate::source::content_project_output(kind).is_some() {
+        let cargo_manifest = root.join("Cargo.toml");
+        let original = fs::read_to_string(&cargo_manifest)
+            .map_err(io("read Cargo workspace manifest", &cargo_manifest))?;
+        let updated = cargo_workspace_with_member(&original, &relative_root)?;
+        Some((cargo_manifest, original, updated))
+    } else {
+        None
+    };
     let content_directory = root.join("content");
     let created_content_directory = match fs::symlink_metadata(&content_directory) {
         Ok(metadata) if metadata.file_type().is_dir() => false,
@@ -1662,41 +1667,51 @@ pub fn create_source_project_with_workshop(
         manifest_file
             .write_all(body.as_bytes())
             .map_err(io("write content manifest", &manifest_path))?;
-        let readme_path = output.join("README.md");
-        let mut readme = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&readme_path)
-            .map_err(io("create content README", &readme_path))?;
-        let role_manifest = manifest_path
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "content.vapor.toml".to_owned());
-        writeln!(readme,
-            "# {name}\n\nVapor {kind} content `{content_id}`.\n\n- `{role_manifest}` defines this content's identity and dependencies.\n- `Cargo.toml` registers the Rust project in the workspace.\n- `src/` contains the generated starting code; runtime binaries and libraries are declared by the role manifest.\n\nUse Vapor Studio to edit and validate this project, then package or deploy it through Vapor."
-        )
+        if matches!(
+            &template,
+            crate::source::GeneratedContentProject::Rust { .. }
+        ) {
+            let readme_path = output.join("README.md");
+            let mut readme = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&readme_path)
+                .map_err(io("create content README", &readme_path))?;
+            let role_manifest = manifest_path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "content.vapor.toml".to_owned());
+            writeln!(
+                readme,
+                "# {name}\n\nVapor {kind} content `{content_id}`.\n\n- `{role_manifest}` defines this content's identity and dependencies.\n- `Cargo.toml` registers the Rust project in the workspace.\n- `src/` contains the generated starting code; runtime binaries and libraries are declared by the role manifest.\n\nUse Vapor Studio to edit and validate this project, then package or deploy it through Vapor."
+            )
             .map_err(io("write content README", &readme_path))?;
+        }
+        if let Some((cargo_manifest, original_cargo, _)) = &cargo_transaction {
+            let current_cargo = fs::read_to_string(cargo_manifest)
+                .map_err(io("re-read Cargo workspace manifest", cargo_manifest))?;
+            if current_cargo != *original_cargo {
+                return Err("Cargo workspace manifest changed while content was being prepared; retry the action".to_owned());
+            }
+        }
         let current_workspace = fs::read_to_string(&workspace_manifest)
             .map_err(io("re-read Workspace manifest", &workspace_manifest))?;
         if current_workspace != original_workspace {
             return Err("Workspace manifest changed while content was being prepared; retry the action".to_owned());
         }
-        let current_cargo = fs::read_to_string(&cargo_manifest)
-            .map_err(io("re-read Cargo workspace manifest", &cargo_manifest))?;
-        if current_cargo != original_cargo {
-            return Err("Cargo workspace manifest changed while content was being prepared; retry the action".to_owned());
+        if let Some((cargo_manifest, original_cargo, updated_cargo)) = &cargo_transaction {
+            replace_source_manifest(
+                cargo_manifest,
+                original_cargo,
+                updated_cargo,
+                "Cargo workspace membership",
+                || {
+                    WorkspaceManifest::load(paths)?;
+                    vapor_core::VaporWorkspace::load(root).map_err(|error| error.to_string())?;
+                    Ok(())
+                },
+            )?;
         }
-        replace_source_manifest(
-            &cargo_manifest,
-            &original_cargo,
-            &updated_cargo,
-            "Cargo workspace membership",
-            || {
-                WorkspaceManifest::load(paths)?;
-                vapor_core::VaporWorkspace::load(root).map_err(|error| error.to_string())?;
-                Ok(())
-            },
-        )?;
         replace_workspace_manifest_locked(
             &workspace_manifest,
             &original_workspace,
@@ -1738,30 +1753,32 @@ pub fn create_source_project_with_workshop(
                 workspace_manifest.display()
             )),
         }
-        match fs::read_to_string(&cargo_manifest) {
-            Ok(current) if current == updated_cargo => {
-                if let Err(restore_error) = replace_source_manifest(
-                    &cargo_manifest,
-                    &updated_cargo,
-                    &original_cargo,
-                    "Cargo workspace membership rollback",
-                    || Ok(()),
-                ) {
-                    recovery.push(format!(
-                        "could not restore {}: {restore_error}",
-                        cargo_manifest.display()
-                    ));
+        if let Some((cargo_manifest, original_cargo, updated_cargo)) = &cargo_transaction {
+            match fs::read_to_string(cargo_manifest) {
+                Ok(current) if current == *updated_cargo => {
+                    if let Err(restore_error) = replace_source_manifest(
+                        cargo_manifest,
+                        updated_cargo,
+                        original_cargo,
+                        "Cargo workspace membership rollback",
+                        || Ok(()),
+                    ) {
+                        recovery.push(format!(
+                            "could not restore {}: {restore_error}",
+                            cargo_manifest.display()
+                        ));
+                    }
                 }
+                Ok(current) if current == *original_cargo => {}
+                Ok(_) => recovery.push(format!(
+                    "{} changed during recovery and was left untouched",
+                    cargo_manifest.display()
+                )),
+                Err(error) => recovery.push(format!(
+                    "could not inspect {} during recovery: {error}",
+                    cargo_manifest.display()
+                )),
             }
-            Ok(current) if current == original_cargo => {}
-            Ok(_) => recovery.push(format!(
-                "{} changed during recovery and was left untouched",
-                cargo_manifest.display()
-            )),
-            Err(error) => recovery.push(format!(
-                "could not inspect {} during recovery: {error}",
-                cargo_manifest.display()
-            )),
         }
         if let Err(cleanup_error) = fs::remove_dir_all(&output) {
             recovery.push(format!(
@@ -2767,14 +2784,19 @@ fn source_project_manifest(
 ) -> String {
     let mut output =
         format!("schema = 1\n\n[{kind}]\nname = \"{name}\"\nversion = \"{version}\"\n");
-    match template.output {
-        Some(crate::source::GeneratedOutputKind::Binary) => {
-            output.push_str(&format!("binaries = [\"{}\"]\n", template.crate_name));
-        }
-        Some(crate::source::GeneratedOutputKind::Library) => {
-            output.push_str(&format!("libraries = [\"{}\"]\n", template.crate_name));
-        }
-        None => {}
+    match template {
+        crate::source::GeneratedContentProject::Rust {
+            crate_name,
+            output: output_kind,
+        } => match output_kind {
+            crate::source::GeneratedOutputKind::Binary => {
+                output.push_str(&format!("binaries = [\"{crate_name}\"]\n"));
+            }
+            crate::source::GeneratedOutputKind::Library => {
+                output.push_str(&format!("libraries = [\"{crate_name}\"]\n"));
+            }
+        },
+        crate::source::GeneratedContentProject::MetadataOnly => {}
     }
     let mut used = BTreeSet::new();
     for child in children {

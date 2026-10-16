@@ -101,7 +101,7 @@ Application source root repo
 │   │   Cargo package
 │   │
 │   ├── Vapor content artifact
-│   │   Cargo package plus content role
+│   │   Content role; Cargo package only when the role contains code
 │   │
 │   └── Nested metadata fragments
 │       Capability, composition, publication, or module metadata
@@ -332,10 +332,11 @@ artifacts share source.
 
 ## Publishable artifacts and Workshop
 
-A workspace may produce multiple publishable Vapor artifacts. In the bootstrap
-model, publishable artifacts are content projects backed by Cargo packages.
-Ordinary Cargo packages are not independently publishable Vapor content merely
-because they are Cargo packages.
+A workspace may produce multiple publishable Vapor artifacts. A content project
+may use a Cargo package when its role contains code; composition-only projects
+are publishable from their role manifest and metadata. Ordinary Cargo packages
+are not independently publishable Vapor content merely because they are Cargo
+packages.
 
 Normal workspace publishing:
 
