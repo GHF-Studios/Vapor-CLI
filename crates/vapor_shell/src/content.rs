@@ -1541,6 +1541,11 @@ pub fn create_source_project_with_workshop(
     workshop: &WorkshopPolicyDraft,
 ) -> Result<PathBuf, String> {
     validate_workshop_policy_draft(workshop)?;
+    let workspace_manifest = paths
+        .source()
+        .root()
+        .join(manifest::WORKSPACE_FILE_NAME);
+    let _workspace_lock = acquire_workspace_project_lock(&workspace_manifest)?;
     let workspace = WorkspaceManifest::load(paths)?;
     if workspace.kind() != crate::workspace::SourceRootKind::Workspace {
         return Err("new content can only be added to a Vapor workspace".to_owned());
@@ -1588,7 +1593,6 @@ pub fn create_source_project_with_workshop(
     let root = paths.source().root();
     let relative_root = PathBuf::from("content").join(name);
     let output = root.join(&relative_root);
-    let workspace_manifest = root.join(manifest::WORKSPACE_FILE_NAME);
     let original_workspace = fs::read_to_string(&workspace_manifest)
         .map_err(io("read workspace manifest", &workspace_manifest))?;
     let updated_workspace = format!(
@@ -1674,6 +1678,16 @@ pub fn create_source_project_with_workshop(
             "# {name}\n\nVapor {kind} content `{content_id}`.\n\n- `{role_manifest}` defines this content's identity and dependencies.\n- `Cargo.toml` registers the Rust project in the workspace.\n- `src/` contains the generated starting code; runtime binaries and libraries are declared by the role manifest.\n\nUse Vapor Studio to edit and validate this project, then package or deploy it through Vapor."
         )
             .map_err(io("write content README", &readme_path))?;
+        let current_workspace = fs::read_to_string(&workspace_manifest)
+            .map_err(io("re-read Workspace manifest", &workspace_manifest))?;
+        if current_workspace != original_workspace {
+            return Err("Workspace manifest changed while content was being prepared; retry the action".to_owned());
+        }
+        let current_cargo = fs::read_to_string(&cargo_manifest)
+            .map_err(io("re-read Cargo workspace manifest", &cargo_manifest))?;
+        if current_cargo != original_cargo {
+            return Err("Cargo workspace manifest changed while content was being prepared; retry the action".to_owned());
+        }
         cargo_touched = true;
         fs::write(&cargo_manifest, &updated_cargo)
             .map_err(io("register Cargo workspace member", &cargo_manifest))?;
@@ -1895,10 +1909,7 @@ fn replace_workspace_manifest<T>(
     action: &str,
     validate: impl FnOnce() -> Result<T, String>,
 ) -> Result<T, String> {
-    let lock_path = manifest_path.with_file_name(".Workspace.vapor-project.lock");
-    let lock_file = fs::OpenOptions::new().write(true).create_new(true).open(&lock_path)
-        .map_err(|error| format!("cannot acquire Workspace edit lock '{}': {error}", lock_path.display()))?;
-    let _lock = SourceManifestEditLock { path: lock_path, file: Some(lock_file) };
+    let _lock = acquire_workspace_project_lock(manifest_path)?;
     let current = fs::read_to_string(manifest_path)
         .map_err(io("re-read Workspace manifest", manifest_path))?;
     if current != expected_source {
@@ -1935,6 +1946,24 @@ fn replace_workspace_manifest<T>(
             })
         }
     }
+}
+
+fn acquire_workspace_project_lock(manifest_path: &Path) -> Result<SourceManifestEditLock, String> {
+    let lock_path = manifest_path.with_file_name(".Workspace.vapor-project.lock");
+    let lock_file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&lock_path)
+        .map_err(|error| {
+            format!(
+                "cannot acquire Workspace edit lock '{}': {error}",
+                lock_path.display()
+            )
+        })?;
+    Ok(SourceManifestEditLock {
+        path: lock_path,
+        file: Some(lock_file),
+    })
 }
 
 /// Load the editable dependency graph for a locally authored content project.
