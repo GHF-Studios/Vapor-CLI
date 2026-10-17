@@ -282,7 +282,7 @@ fn shell_only_error() -> String {
     name = "vapor",
     bin_name = "vapor",
     about = "Open Vapor Shell or run a launch/source command",
-    after_help = "Run `vapor` with no command to enter the interactive Shell.\nUse `vapor --startup-script NAME` to run an app/source script before the prompt.\nUse app-root tools under `resources/vapor/tools/production/app_setup` for player/developer setup.\nUse source commands to choose the project you want Vapor to work with."
+    after_help = "Run `vapor` with no command to enter the interactive Shell.\nUse `vapor launch --current-workspace` from inside a workspace to run its default source configuration.\nUse `vapor --startup-script NAME` to run an app/source script before the prompt.\nUse app-root tools under `resources/vapor/tools/production/app_setup` for player/developer setup.\nUse source commands to choose the project you want Vapor to work with."
 )]
 struct HostCommand {
     /// Capture this run for explicit private-test diagnostics handling.
@@ -299,8 +299,10 @@ struct HostCommand {
 enum HostSubcommand {
     /// Launch a playable Vapor composition.
     Launch {
+        #[arg(long)]
+        current_workspace: bool,
         #[command(subcommand)]
-        command: LaunchCommand,
+        command: Option<LaunchCommand>,
     },
     /// Build and locally deploy the Vapor Client workspace from source.
     Client {
@@ -389,7 +391,9 @@ impl HostCommand {
 impl HostSubcommand {
     fn into_shell_command(self) -> ShellCommand {
         match self {
-            HostSubcommand::Launch { command } => ShellCommand::Launch { command },
+            HostSubcommand::Launch { current_workspace, command } => {
+                ShellCommand::Launch { current_workspace, command }
+            }
             HostSubcommand::Client { command } => ShellCommand::Client { command },
             HostSubcommand::Source { command } => ShellCommand::Source { command },
             HostSubcommand::Installation => ShellCommand::Installation,

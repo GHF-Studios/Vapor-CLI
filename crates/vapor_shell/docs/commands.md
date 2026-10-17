@@ -52,6 +52,14 @@ local` from the source workspace.
 
 ## Launch
 
+### `launch --current-workspace`
+
+From a directory inside a Vapor Workspace, discover that workspace by walking up
+from the current directory and run its default source configuration with Vapor's
+managed Rust toolchain. This is the PWD-sensitive source-run path; it inherits the
+launching process environment, including a running Steam client when the game
+needs one.
+
 ### `launch default [--account ACCOUNT]`
 
 Launch the app manifest's default packagepack composition. The `default`

@@ -740,7 +740,7 @@ impl PackagepackSelection {
 pub struct InstalledPackagepackGraph {
     root: InstalledArtifactSnapshot,
     engine: InstalledArtifactSnapshot,
-    game: Option<InstalledArtifactSnapshot>,
+    game: InstalledArtifactSnapshot,
     nodes: Vec<InstalledArtifactSnapshot>,
 }
 
@@ -755,9 +755,9 @@ impl InstalledPackagepackGraph {
         &self.engine
     }
 
-    /// Optional installed Game.
-    pub fn game(&self) -> Option<&InstalledArtifactSnapshot> {
-        self.game.as_ref()
+    /// Effective installed Game.
+    pub fn game(&self) -> &InstalledArtifactSnapshot {
+        &self.game
     }
 
     /// Required resolved nodes, including root, Engine, Game, and dependencies.
@@ -773,8 +773,8 @@ pub struct PackagepackLaunchPlan {
     packagepack_root: PathBuf,
     engine_id: String,
     engine_root: PathBuf,
-    game_id: Option<String>,
-    game_root: Option<PathBuf>,
+    game_id: String,
+    game_root: PathBuf,
     runtime_target: String,
     binary: PathBuf,
     verified_ids: Vec<String>,
@@ -801,17 +801,17 @@ impl PackagepackLaunchPlan {
         &self.engine_root
     }
 
-    /// Optional Game content ID.
-    pub fn game_id(&self) -> Option<&str> {
-        self.game_id.as_deref()
+    /// Required Game content ID.
+    pub fn game_id(&self) -> &str {
+        &self.game_id
     }
 
-    /// Optional installed Game root.
-    pub fn game_root(&self) -> Option<&Path> {
-        self.game_root.as_deref()
+    /// Installed Game root.
+    pub fn game_root(&self) -> &Path {
+        &self.game_root
     }
 
-    /// Host runtime target selected for the Engine.
+    /// Host runtime target selected for the Packagepack executable.
     pub fn runtime_target(&self) -> &str {
         &self.runtime_target
     }
@@ -896,25 +896,26 @@ fn inspect_installed_packagepack(
         "game",
         ContentKind::Gamepack,
         packagepack_id,
-    )?;
-    let game = game_id
-        .as_ref()
-        .map(|id| {
-            let game = index.installed.get(id).ok_or_else(|| {
-                format!(
-                    "Packagepack '{}' requires missing Game '{}'",
-                    packagepack_id, id
-                )
-            })?;
-            if game.kind != ContentKind::Game.to_string() {
-                return Err(format!(
-                    "Packagepack '{}' resolves Game '{}' to content kind {}",
-                    packagepack_id, id, game.kind
-                ));
-            }
-            Ok(installed_snapshot_from_record(game))
-        })
-        .transpose()?;
+    )?
+    .ok_or_else(|| {
+        format!(
+            "Packagepack '{}' has no required Game or Gamepack dependency",
+            packagepack_id
+        )
+    })?;
+    let game = index.installed.get(&game_id).ok_or_else(|| {
+        format!(
+            "Packagepack '{}' requires missing Game '{}'",
+            packagepack_id, game_id
+        )
+    })?;
+    if game.kind != ContentKind::Game.to_string() {
+        return Err(format!(
+            "Packagepack '{}' resolves Game '{}' to content kind {}",
+            packagepack_id, game_id, game.kind
+        ));
+    }
+    let game = installed_snapshot_from_record(game);
     let nodes = verified
         .iter()
         .filter_map(|id| index.installed.get(id))
@@ -939,20 +940,14 @@ pub fn prepare_packagepack_launch(
 ) -> Result<PackagepackLaunchPlan, String> {
     let graph = installed_packagepack_graph(installation, selector)?;
     let runtime_target = host_runtime_target();
-    let binary = engine_launch_binary(graph.engine.installed_root(), &runtime_target)?;
+    let binary = packagepack_launch_binary(graph.root.installed_root(), &runtime_target)?;
     Ok(PackagepackLaunchPlan {
         packagepack_id: graph.root.artifact_id().to_owned(),
         packagepack_root: graph.root.installed_root().to_path_buf(),
         engine_id: graph.engine.artifact_id().to_owned(),
         engine_root: graph.engine.installed_root().to_path_buf(),
-        game_id: graph
-            .game
-            .as_ref()
-            .map(|game| game.artifact_id().to_owned()),
-        game_root: graph
-            .game
-            .as_ref()
-            .map(|game| game.installed_root().to_path_buf()),
+        game_id: graph.game.artifact_id().to_owned(),
+        game_root: graph.game.installed_root().to_path_buf(),
         runtime_target,
         binary,
         verified_ids: graph
@@ -983,11 +978,9 @@ pub fn run_packagepack_launch(
         .env("VAPOR_ENGINE_ROOT", &plan.engine_root)
         .env("VAPOR_RUNTIME_TARGET", &plan.runtime_target)
         .args(arguments);
-    if let (Some(game_id), Some(game_root)) = (&plan.game_id, &plan.game_root) {
-        command
-            .env("VAPOR_GAME_ID", game_id)
-            .env("VAPOR_GAME_ROOT", game_root);
-    }
+    command
+        .env("VAPOR_GAME_ID", &plan.game_id)
+        .env("VAPOR_GAME_ROOT", &plan.game_root);
     let status = command
         .status()
         .map_err(|error| format!("failed to launch '{}': {error}", plan.binary.display()))?;
@@ -1030,6 +1023,8 @@ fn verify_launch_closure(
                 report.detail()
             ));
         }
+        let artifact = read_deployed_manifest(&record.installed_root)?;
+        validate_artifact_dependency_roles(&artifact)?;
         for conflict in &record.conflicts {
             if index
                 .installed
@@ -1042,7 +1037,7 @@ fn verify_launch_closure(
                 ));
             }
         }
-        for dependency in &record.dependencies {
+        for dependency in artifact.dependencies() {
             if dependency.optional() && !index.installed.contains_key(dependency.id()) {
                 continue;
             }
@@ -1072,6 +1067,12 @@ fn verify_launch_closure(
                     child.version.as_deref().unwrap_or("unversioned")
                 ));
             }
+            let child_artifact = read_deployed_manifest(&child.installed_root)?;
+            validate_dependency_edge(
+                artifact.kind(),
+                dependency.relationship(),
+                &child_artifact,
+            )?;
             verify_launch_closure(index, dependency.id(), visiting, verified)?;
         }
         Ok(())
@@ -1182,53 +1183,56 @@ fn resolve_composed_role(
     }
 }
 
-fn engine_launch_binary(engine_root: &Path, runtime_target: &str) -> Result<PathBuf, String> {
-    let manifest_path = engine_root.join(manifest::ENGINE_FILE_NAME);
+fn packagepack_launch_binary(
+    packagepack_root: &Path,
+    runtime_target: &str,
+) -> Result<PathBuf, String> {
+    let manifest_path = packagepack_root.join(manifest::PACKAGEPACK_FILE_NAME);
     let source = fs::read_to_string(&manifest_path)
         .map_err(|error| format!("failed to read '{}': {error}", manifest_path.display()))?;
     let parsed: LaunchManifest = toml::from_str(&source)
         .map_err(|error| format!("failed to parse '{}': {error}", manifest_path.display()))?;
-    let engine = parsed.engine.ok_or_else(|| {
+    let packagepack = parsed.packagepack.ok_or_else(|| {
         format!(
-            "resolved engine manifest '{}' has no [engine] section",
+            "resolved Packagepack manifest '{}' has no [packagepack] section",
             manifest_path.display()
         )
     })?;
-    let runtime = engine
+    let runtime = packagepack
         .runtime
         .iter()
         .find(|runtime| runtime.target == runtime_target)
         .ok_or_else(|| {
             format!(
-                "resolved engine '{}' has no runtime payload for {runtime_target}",
+                "Packagepack '{}' has no ready-to-run build for {runtime_target}; update this game setup to download its executable",
                 manifest_path.display()
             )
         })?;
     let binary_name = runtime.binaries.first().ok_or_else(|| {
         format!(
-            "resolved engine '{}' declares no runtime binary for {runtime_target}",
+            "Packagepack '{}' contains no executable for {runtime_target}; publish a built Packagepack before launching",
             manifest_path.display()
         )
     })?;
     let mut components = Path::new(binary_name).components();
     if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
         return Err(format!(
-            "engine runtime binary must be a file name, got '{binary_name}'"
+            "Packagepack runtime binary must be a file name, got '{binary_name}'"
         ));
     }
-    let binary = engine_root
+    let binary = packagepack_root
         .join("bin")
         .join(runtime_target)
         .join(binary_name);
     let metadata = fs::symlink_metadata(&binary).map_err(|error| {
         format!(
-            "resolved engine content binary is missing: {}: {error}",
+            "resolved Packagepack executable is missing: {}: {error}",
             binary.display()
         )
     })?;
     if !metadata.file_type().is_file() {
         return Err(format!(
-            "resolved engine content binary is not a regular file: {}",
+            "resolved Packagepack executable is not a regular file: {}",
             binary.display()
         ));
     }
@@ -1238,7 +1242,6 @@ fn engine_launch_binary(engine_root: &Path, runtime_target: &str) -> Result<Path
 #[derive(Debug, Deserialize)]
 struct LaunchManifest {
     packagepack: Option<LaunchContent>,
-    engine: Option<LaunchContent>,
     enginepack: Option<LaunchContent>,
     gamepack: Option<LaunchContent>,
 }
@@ -2135,6 +2138,7 @@ pub fn save_source_composition(
         }
         let expected_relationship = source_dependency_relationship(root_kind, child.kind())
             .ok_or_else(|| format!("{} cannot be included in a {root_kind}", child.kind()))?;
+        validate_dependency_edge(root_kind, &link.relationship, child)?;
         let preserves_existing_relationship = expected_relationship == "dependency"
             && current.links.iter().any(|existing| {
                 existing.id == link.id && existing.relationship == link.relationship
@@ -2604,6 +2608,69 @@ pub fn source_dependency_allowed(parent: ContentKind, child: ContentKind) -> boo
     }
 }
 
+fn validate_artifact_dependency_roles(artifact: &ContentArtifact) -> Result<(), String> {
+    let relationships = artifact
+        .dependencies()
+        .iter()
+        .map(|dependency| dependency.relationship().to_owned())
+        .collect::<Vec<_>>();
+    validate_source_relationship_cardinality(artifact.kind(), &relationships)
+        .map_err(|error| format!("{}: {error}", artifact.id()))?;
+    for dependency in artifact.dependencies().iter().filter(|edge| edge.optional()) {
+        if matches!(
+            (artifact.kind(), dependency.relationship()),
+            (ContentKind::Packagepack, "engine" | "enginepack" | "game" | "gamepack")
+                | (ContentKind::Game, "engine")
+                | (ContentKind::Enginepack, "engine")
+                | (ContentKind::Gamepack, "game")
+        ) {
+            return Err(format!(
+                "{} cannot mark its required '{}' relationship optional",
+                artifact.id(),
+                dependency.relationship()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_dependency_edge(
+    parent: ContentKind,
+    relationship: &str,
+    child: &ContentArtifact,
+) -> Result<(), String> {
+    if !source_dependency_allowed(parent, child.kind()) {
+        return Err(format!(
+            "{parent} cannot depend on {} content {}",
+            child.kind(),
+            child.id()
+        ));
+    }
+    if let Some(expected) = source_dependency_relationship(parent, child.kind())
+        && expected != "dependency"
+        && relationship != expected
+    {
+        return Err(format!(
+            "{} dependency '{}' must use the '{}' relationship, not '{}'",
+            parent,
+            child.id(),
+            expected,
+            relationship
+        ));
+    }
+    if source_dependency_relationship(parent, child.kind()) == Some("dependency")
+        && matches!(relationship, "engine" | "enginepack" | "game" | "gamepack")
+    {
+        return Err(format!(
+            "{} content {} cannot use the '{}' composition role; use 'dependency'",
+            child.kind(),
+            child.id(),
+            relationship
+        ));
+    }
+    Ok(())
+}
+
 /// Return the authored edge name for a supported parent/child role pair.
 pub fn source_dependency_relationship(parent: ContentKind, child: ContentKind) -> Option<&'static str> {
     if !source_dependency_allowed(parent, child) {
@@ -2643,14 +2710,16 @@ fn source_relationship_choice_group(
     }
 }
 
-/// Return the exclusive role slot that must be populated before this content
+/// Return every exclusive role slot that must be populated before this content
 /// kind can form a valid project.
-pub fn source_required_dependency_choice_group(parent: ContentKind) -> Option<&'static str> {
+pub fn source_required_dependency_choice_groups(
+    parent: ContentKind,
+) -> &'static [&'static str] {
     match parent {
-        ContentKind::Packagepack => Some("engine-choice"),
-        ContentKind::Game | ContentKind::Enginepack => Some("engine"),
-        ContentKind::Gamepack => Some("game"),
-        _ => None,
+        ContentKind::Packagepack => &["engine-choice", "game-choice"],
+        ContentKind::Game | ContentKind::Enginepack => &["engine"],
+        ContentKind::Gamepack => &["game"],
+        _ => &[],
     }
 }
 
@@ -2696,22 +2765,24 @@ fn validate_source_relationship_cardinality(
             })
             .count()
     };
-    if let Some(required_group) = source_required_dependency_choice_group(kind)
-        && count_group(required_group) != 1
-    {
-        return Err(match kind {
-            ContentKind::Packagepack => {
-                "a Packagepack needs exactly one Engine or Enginepack dependency"
-            }
-            ContentKind::Game => "a Game needs exactly one Engine dependency",
-            ContentKind::Enginepack => "an Enginepack needs exactly one Engine",
-            ContentKind::Gamepack => "a Gamepack needs exactly one Game",
-            _ => "content is missing a required role dependency",
+    for required_group in source_required_dependency_choice_groups(kind) {
+        if count_group(required_group) != 1 {
+            let message = match *required_group {
+                "engine-choice" => {
+                    "a Packagepack needs exactly one Engine or Enginepack dependency"
+                }
+                "game-choice" => {
+                    "a Packagepack needs exactly one Game or Gamepack dependency"
+                }
+                "engine" if kind == ContentKind::Game => {
+                    "a Game needs exactly one Engine dependency"
+                }
+                "engine" => "an Enginepack needs exactly one Engine",
+                "game" => "a Gamepack needs exactly one Game",
+                _ => "content is missing a required role dependency",
+            };
+            return Err(message.to_owned());
         }
-        .to_owned());
-    }
-    if kind == ContentKind::Packagepack && count_group("game-choice") > 1 {
-        return Err("a Packagepack can select at most one Game or Gamepack".to_owned());
     }
     Ok(())
 }
@@ -2960,23 +3031,12 @@ pub fn validate(
             };
             let local_child = find_local_source(&catalog, dependency.id(), requirement.as_ref());
             if let Some(child) = local_child {
-                if !source_dependency_allowed(artifact.kind(), child.kind()) {
-                    errors.push(format!(
-                        "{} cannot depend on {} content {}",
-                        artifact.kind(),
-                        child.kind(),
-                        child.id()
-                    ));
-                } else if let Some(expected) = source_dependency_relationship(artifact.kind(), child.kind())
-                    && expected != "dependency"
-                    && dependency.relationship() != expected
-                {
-                    errors.push(format!(
-                        "{} reference '{}' must use the '{}' relationship",
-                        artifact.id(),
-                        child.id(),
-                        expected
-                    ));
+                if let Err(error) = validate_dependency_edge(
+                    artifact.kind(),
+                    dependency.relationship(),
+                    child,
+                ) {
+                    errors.push(error);
                 }
             } else if !dependency.optional() && dependency.workshop_id().is_none() {
                 errors.push(format!(
@@ -3414,6 +3474,21 @@ fn import_workshop_item(
     })
 }
 
+/// Import a Workshop download supplied by Steamworks into Vapor's app-owned cache.
+///
+/// # Errors
+///
+/// Returns validation, package, or filesystem errors when the downloaded item
+/// cannot be copied and indexed as deployed content.
+pub fn import_workshop_item_from_provider(
+    installation: &InstallationPaths,
+    app_id: u32,
+    published_file_id: &str,
+    provider_root: &Path,
+) -> Result<AcquireReport, String> {
+    import_workshop_item(installation, app_id, published_file_id, provider_root)
+}
+
 /// Install source or cached content into the app-owned installed-content tree.
 ///
 /// # Errors
@@ -3516,6 +3591,8 @@ pub fn install_with_account_for_targets(
     install_selector(
         &context,
         selector,
+        None,
+        None,
         None,
         false,
         &mut index,
@@ -4613,7 +4690,7 @@ pub fn preview_install(
         blockers: Vec::new(),
         warnings: Vec::new(),
     };
-    resolve_install_plan_node(&mut context, selector, None, true, false)?;
+    resolve_install_plan_node(&mut context, selector, None, None, true, false)?;
     Ok(InstallPlan {
         selector: selector.to_owned(),
         nodes: context.nodes,
@@ -4637,6 +4714,7 @@ fn resolve_install_plan_node(
     context: &mut InstallPlanContext<'_>,
     selector: &str,
     requirement: Option<&ContentReference>,
+    parent_kind: Option<ContentKind>,
     root: bool,
     local_closure: bool,
 ) -> Result<(), String> {
@@ -4667,6 +4745,8 @@ fn resolve_install_plan_node(
             InstallPlanSource::Installed,
             true,
             false,
+            parent_kind,
+            requirement,
         );
     }
 
@@ -4688,6 +4768,8 @@ fn resolve_install_plan_node(
             InstallPlanSource::Workspace,
             false,
             local_closure,
+            parent_kind,
+            requirement,
         );
     }
 
@@ -4722,6 +4804,8 @@ fn resolve_install_plan_node(
                 InstallPlanSource::Cache,
                 already_installed,
                 local_closure,
+                parent_kind,
+                requirement,
             );
         }
     }
@@ -4738,6 +4822,8 @@ fn resolve_install_plan_node(
             InstallPlanSource::Installed,
             true,
             false,
+            parent_kind,
+            requirement,
         );
     }
 
@@ -4807,7 +4893,18 @@ fn resolve_install_plan_artifact(
     source: InstallPlanSource,
     already_installed: bool,
     local_closure: bool,
+    parent_kind: Option<ContentKind>,
+    requirement: Option<&ContentReference>,
 ) -> Result<(), String> {
+    if let (Some(parent_kind), Some(requirement)) = (parent_kind, requirement)
+        && let Err(error) = validate_dependency_edge(
+            parent_kind,
+            requirement.relationship(),
+            &artifact,
+        )
+    {
+        context.blockers.push(error);
+    }
     let id = artifact.id().to_owned();
     if context.visiting.contains(&id) {
         context
@@ -4834,27 +4931,31 @@ fn resolve_install_plan_artifact(
         })
         .collect::<Vec<_>>();
 
+    if let Err(error) = validate_artifact_dependency_roles(&artifact) {
+        context.blockers.push(error);
+    }
+
     let descendants_local = local_closure || source == InstallPlanSource::Workspace;
-    let reuse_installed_subgraph =
-        source == InstallPlanSource::Installed && already_installed && !local_closure;
-    if !reuse_installed_subgraph {
-        for dependency in artifact.dependencies() {
-            if dependency.optional() {
-                context.warnings.push(format!(
-                    "optional {} '{}' is not selected automatically",
-                    dependency.relationship(),
-                    dependency.id()
-                ));
-                continue;
-            }
-            resolve_install_plan_node(
-                context,
-                dependency.id(),
-                Some(dependency),
-                false,
-                descendants_local,
-            )?;
+    // An installed root can still have missing or disabled dependencies. Walk
+    // its required closure so previews and install decisions describe a
+    // launchable composition rather than only the selected Packagepack.
+    for dependency in artifact.dependencies() {
+        if dependency.optional() {
+            context.warnings.push(format!(
+                "optional {} '{}' is not selected automatically",
+                dependency.relationship(),
+                dependency.id()
+            ));
+            continue;
         }
+        resolve_install_plan_node(
+            context,
+            dependency.id(),
+            Some(dependency),
+            Some(artifact.kind()),
+            false,
+            descendants_local,
+        )?;
     }
     for conflict in artifact.conflicts() {
         if conflict.id() == id || context.selected.contains_key(conflict.id()) {
@@ -4914,6 +5015,8 @@ fn install_selector(
     context: &InstallContext<'_>,
     selector: &str,
     expected_id: Option<&str>,
+    parent_kind: Option<ContentKind>,
+    relationship: Option<&str>,
     require_workspace: bool,
     index: &mut ContentIndex,
     visiting: &mut BTreeSet<String>,
@@ -4929,6 +5032,10 @@ fn install_selector(
                 expected_id.unwrap_or_default()
             ));
         }
+        if let (Some(parent_kind), Some(relationship)) = (parent_kind, relationship) {
+            validate_dependency_edge(parent_kind, relationship, artifact)?;
+        }
+        validate_artifact_dependency_roles(artifact)?;
         if !visiting.insert(artifact.id().to_owned()) {
             return Err(format!(
                 "content dependency cycle includes {}",
@@ -4961,6 +5068,11 @@ fn install_selector(
                     .find(|report| report.artifact_id() == child.id())
                 {
                     if existing.version() == child.version() {
+                        validate_dependency_edge(
+                            artifact.kind(),
+                            dependency.relationship(),
+                            child,
+                        )?;
                         continue;
                     }
                     return Err(format!(
@@ -4973,6 +5085,8 @@ fn install_selector(
                     context,
                     &versioned_selector,
                     Some(child.id()),
+                    Some(artifact.kind()),
+                    Some(dependency.relationship()),
                     true,
                     index,
                     visiting,
@@ -5071,6 +5185,10 @@ fn install_selector(
             expected_id.unwrap_or_default()
         ));
     }
+    if let (Some(parent_kind), Some(relationship)) = (parent_kind, relationship) {
+        validate_dependency_edge(parent_kind, relationship, &pseudo)?;
+    }
+    validate_artifact_dependency_roles(&pseudo)?;
     let pseudo_id = pseudo.id().to_owned();
     if !visiting.insert(pseudo_id.clone()) {
         return Err(format!("content dependency cycle includes {}", pseudo.id()));
@@ -5096,6 +5214,16 @@ fn install_selector(
                         && version_satisfies(installed.version.as_deref(), requirement.as_ref())
                 })
             {
+                let installed = index
+                    .installed
+                    .get(dependency.id())
+                    .expect("installed dependency was checked above");
+                let installed_artifact = read_deployed_manifest(&installed.installed_root)?;
+                validate_dependency_edge(
+                    pseudo.kind(),
+                    dependency.relationship(),
+                    &installed_artifact,
+                )?;
                 continue;
             }
             if let Some(catalog) = context.catalog
@@ -5111,6 +5239,11 @@ fn install_selector(
                     .find(|report| report.artifact_id() == child.id())
                 {
                     if existing.version() == child.version() {
+                        validate_dependency_edge(
+                            pseudo.kind(),
+                            dependency.relationship(),
+                            child,
+                        )?;
                         continue;
                     }
                     return Err(format!(
@@ -5123,6 +5256,8 @@ fn install_selector(
                     context,
                     &selector,
                     Some(child.id()),
+                    Some(pseudo.kind()),
+                    Some(dependency.relationship()),
                     false,
                     index,
                     visiting,
@@ -5146,6 +5281,8 @@ fn install_selector(
                         context,
                         selector,
                         Some(dependency.id()),
+                        Some(pseudo.kind()),
+                        Some(dependency.relationship()),
                         false,
                         index,
                         visiting,
@@ -6540,6 +6677,24 @@ fn resolve_download_app_id(
         }
     }
     root_steam_app_id(installation)
+}
+
+/// Resolve the Steam application that owns a Workshop item in an install plan.
+///
+/// First-party seeds carry their own application ID. Other items use the
+/// discovered source metadata or the app's Workshop application.
+pub fn workshop_app_id(
+    installation: &InstallationPaths,
+    paths: Option<&EnvironmentPaths>,
+    artifact_id: &str,
+    published_file_id: &str,
+) -> Result<u32, String> {
+    if let Some(seed) = root_content_seed(installation, artifact_id)?
+        .or(root_content_seed(installation, published_file_id)?)
+    {
+        return Ok(seed.app_id);
+    }
+    resolve_download_app_id(installation, paths, published_file_id)
 }
 
 fn resolve_live_workshop_download(

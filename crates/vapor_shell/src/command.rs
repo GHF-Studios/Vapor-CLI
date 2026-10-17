@@ -43,9 +43,13 @@ use vapor_core::{
 pub enum ShellCommand {
     /// Launch a playable Vapor composition.
     Launch {
-        /// Launch target.
+        /// Run the nearest workspace's default source configuration from the
+        /// current directory.
+        #[arg(long)]
+        current_workspace: bool,
+        /// Installed composition to launch. Omit to launch the app's default composition.
         #[command(subcommand)]
-        command: LaunchCommand,
+        command: Option<LaunchCommand>,
     },
 
     /// Build and locally deploy the Vapor Client workspace from source.
@@ -720,8 +724,22 @@ where
 fn operation_descriptor(command: &ShellCommand) -> Option<(&'static str, &'static str, OperationPhase)> {
     use OperationPhase as Phase;
     Some(match command {
-        ShellCommand::Launch { command: LaunchCommand::Default { .. } } => ("runtime", "launch-default", Phase::Resolving),
-        ShellCommand::Launch { command: LaunchCommand::Selected } => ("runtime", "launch-selected", Phase::Resolving),
+        ShellCommand::Launch {
+            current_workspace: true,
+            ..
+        } => ("runtime", "launch-current-workspace", Phase::Running),
+        ShellCommand::Launch {
+            current_workspace: false,
+            command: Some(LaunchCommand::Default { .. }),
+        }
+        | ShellCommand::Launch {
+            current_workspace: false,
+            command: None,
+        } => ("runtime", "launch-default", Phase::Resolving),
+        ShellCommand::Launch {
+            current_workspace: false,
+            command: Some(LaunchCommand::Selected),
+        } => ("runtime", "launch-selected", Phase::Resolving),
         ShellCommand::Client { .. } | ShellCommand::Script { .. } | ShellCommand::Exit => return None,
         ShellCommand::Source { command } => match command {
             SourceCommand::Init { .. } => ("source", "init", Phase::Building),
@@ -801,7 +819,9 @@ fn content_operation_descriptor(command: &ContentCommand) -> (&'static str, &'st
 
 fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control, String> {
     match command {
-        ShellCommand::Launch { command } => execute_launch(command, state)?,
+        ShellCommand::Launch { current_workspace, command } => {
+            execute_launch(command, current_workspace, state)?;
+        }
         ShellCommand::Client { command } => execute_client(command)?,
         ShellCommand::Source { command } => execute_source(command, state)?,
         ShellCommand::Installation => {
@@ -898,8 +918,32 @@ fn execute_client_body(command: ClientCommand) -> Result<(), String> {
     Ok(())
 }
 
-fn execute_launch(command: LaunchCommand, state: &ShellState) -> Result<(), String> {
-    match command {
+fn execute_launch(
+    command: Option<LaunchCommand>,
+    current_workspace: bool,
+    state: &ShellState,
+) -> Result<(), String> {
+    if current_workspace {
+        if command.is_some() {
+            return Err(
+                "`launch --current-workspace` cannot be combined with an installed launch target"
+                    .to_owned(),
+            );
+        }
+        let workspace = vapor_core::VaporWorkspace::discover().map_err(|error| {
+            format!("could not discover a Vapor workspace from the current directory: {error}")
+        })?;
+        println!(
+            "Launching {}/{} from {} with its default Run Configuration…",
+            workspace.manifest.workspace.organization,
+            workspace.manifest.workspace.name,
+            workspace.root.display(),
+        );
+        return vapor_core::run_workspace_configuration(&workspace, "default")
+            .map_err(|error| error.to_string());
+    }
+
+    match command.unwrap_or(LaunchCommand::Default { account: None }) {
         LaunchCommand::Default { account } => launch_default_composition(state, account.as_deref()),
         LaunchCommand::Selected => launch_selected_composition(state),
     }
@@ -1019,11 +1063,9 @@ fn launch_packagepack_composition(
         plan.runtime_target(),
         plan.binary(),
     );
-    if let (Some(game_id), Some(game_root)) = (plan.game_id(), plan.game_root()) {
-        println!("Game content");
-        println!("  id: {game_id}");
-        println!("  root: {}", game_root.display());
-    }
+    println!("Game content");
+    println!("  id: {}", plan.game_id());
+    println!("  root: {}", plan.game_root().display());
     println!();
     println!("Handoff");
     println!("  engine binary: {}", plan.binary().display());
