@@ -29,8 +29,8 @@ use std::{
     sync::Arc,
 };
 use vapor_core::{
-    LocalClientDeploymentOutcome, OperationContext, OperationId, OperationPhase,
-    OperationRequest, OperationService, deploy_client_locally,
+    LocalClientDeploymentOutcome, OperationContext, OperationId, OperationPhase, OperationRequest,
+    OperationService, deploy_client_locally,
 };
 
 #[derive(Debug, Parser)]
@@ -692,7 +692,9 @@ pub fn execute(command: ShellCommand, state: &mut ShellState) -> Result<Control,
     let Some((domain, action, phase)) = operation_descriptor(&command) else {
         return execute_body(command, state);
     };
-    run_cli_operation(domain, action, phase, |_context| execute_body(command, state))
+    run_cli_operation(domain, action, phase, |_context| {
+        execute_body(command, state)
+    })
 }
 
 fn run_cli_operation<T, E>(
@@ -721,7 +723,9 @@ where
     })
 }
 
-fn operation_descriptor(command: &ShellCommand) -> Option<(&'static str, &'static str, OperationPhase)> {
+fn operation_descriptor(
+    command: &ShellCommand,
+) -> Option<(&'static str, &'static str, OperationPhase)> {
     use OperationPhase as Phase;
     Some(match command {
         ShellCommand::Launch {
@@ -740,7 +744,9 @@ fn operation_descriptor(command: &ShellCommand) -> Option<(&'static str, &'stati
             current_workspace: false,
             command: Some(LaunchCommand::Selected),
         } => ("runtime", "launch-selected", Phase::Resolving),
-        ShellCommand::Client { .. } | ShellCommand::Script { .. } | ShellCommand::Exit => return None,
+        ShellCommand::Client { .. } | ShellCommand::Script { .. } | ShellCommand::Exit => {
+            return None;
+        }
         ShellCommand::Source { command } => match command {
             SourceCommand::Init { .. } => ("source", "init", Phase::Building),
             SourceCommand::Status => ("source", "status", Phase::Resolving),
@@ -762,33 +768,57 @@ fn operation_descriptor(command: &ShellCommand) -> Option<(&'static str, &'stati
         ShellCommand::Test { .. } => ("workspace", "test", Phase::Building),
         ShellCommand::Build { .. } => ("workspace", "build", Phase::Building),
         ShellCommand::Validate { .. } => ("workspace", "validate", Phase::Verifying),
-        ShellCommand::Docs { command: DocsCommand::Build } => ("docs", "build", Phase::Building),
-        ShellCommand::Docs { command: DocsCommand::Path { .. } } => ("docs", "path", Phase::Resolving),
-        ShellCommand::Docs { command: DocsCommand::Open { .. } } => ("docs", "open", Phase::Running),
-        ShellCommand::Ide { command: IdeCommand::Status } => ("ide", "status", Phase::Resolving),
-        ShellCommand::Ide { command: IdeCommand::Repair { dry_run: true } } => ("ide", "preview-repair", Phase::Verifying),
-        ShellCommand::Ide { command: IdeCommand::Repair { dry_run: false } } => ("ide", "repair", Phase::Installing),
+        ShellCommand::Docs {
+            command: DocsCommand::Build,
+        } => ("docs", "build", Phase::Building),
+        ShellCommand::Docs {
+            command: DocsCommand::Path { .. },
+        } => ("docs", "path", Phase::Resolving),
+        ShellCommand::Docs {
+            command: DocsCommand::Open { .. },
+        } => ("docs", "open", Phase::Running),
+        ShellCommand::Ide {
+            command: IdeCommand::Status,
+        } => ("ide", "status", Phase::Resolving),
+        ShellCommand::Ide {
+            command: IdeCommand::Repair { dry_run: true },
+        } => ("ide", "preview-repair", Phase::Verifying),
+        ShellCommand::Ide {
+            command: IdeCommand::Repair { dry_run: false },
+        } => ("ide", "repair", Phase::Installing),
         ShellCommand::Root { command } => match command {
             RootCommand::Build { .. } => ("root", "build", Phase::Building),
             RootCommand::Deploy { .. } => ("root", "deploy", Phase::Installing),
             RootCommand::Package { .. } => ("root", "package", Phase::Staging),
-            RootCommand::Publish { dry_run: true, .. } => ("root", "preview-publish", Phase::Staging),
+            RootCommand::Publish { dry_run: true, .. } => {
+                ("root", "preview-publish", Phase::Staging)
+            }
             RootCommand::Publish { dry_run: false, .. } => ("root", "publish", Phase::Publishing),
         },
         ShellCommand::Content { command } => content_operation_descriptor(command),
-        ShellCommand::Provider { command: ProviderCommand::Git { command } } => match command {
+        ShellCommand::Provider {
+            command: ProviderCommand::Git { command },
+        } => match command {
             GitProviderCommand::Status => ("provider", "git-status", Phase::Resolving),
             GitProviderCommand::Link { .. } => ("provider", "git-link", Phase::Installing),
             GitProviderCommand::Clear => ("provider", "git-clear", Phase::Installing),
         },
         ShellCommand::Sdk { .. } => ("sdk", "command", Phase::Running),
-        ShellCommand::Diagnostics { command: DiagnosticsCommand::Status } => ("diagnostics", "status", Phase::Resolving),
-        ShellCommand::Diagnostics { command: DiagnosticsCommand::Upload { dry_run: true } } => ("diagnostics", "preview-upload", Phase::Staging),
-        ShellCommand::Diagnostics { command: DiagnosticsCommand::Upload { dry_run: false } } => ("diagnostics", "upload", Phase::Publishing),
+        ShellCommand::Diagnostics {
+            command: DiagnosticsCommand::Status,
+        } => ("diagnostics", "status", Phase::Resolving),
+        ShellCommand::Diagnostics {
+            command: DiagnosticsCommand::Upload { dry_run: true },
+        } => ("diagnostics", "preview-upload", Phase::Staging),
+        ShellCommand::Diagnostics {
+            command: DiagnosticsCommand::Upload { dry_run: false },
+        } => ("diagnostics", "upload", Phase::Publishing),
     })
 }
 
-fn content_operation_descriptor(command: &ContentCommand) -> (&'static str, &'static str, OperationPhase) {
+fn content_operation_descriptor(
+    command: &ContentCommand,
+) -> (&'static str, &'static str, OperationPhase) {
     use OperationPhase as Phase;
     let (action, phase) = match command {
         ContentCommand::Status => ("status", Phase::Resolving),
@@ -819,7 +849,10 @@ fn content_operation_descriptor(command: &ContentCommand) -> (&'static str, &'st
 
 fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control, String> {
     match command {
-        ShellCommand::Launch { current_workspace, command } => {
+        ShellCommand::Launch {
+            current_workspace,
+            command,
+        } => {
             execute_launch(command, current_workspace, state)?;
         }
         ShellCommand::Client { command } => execute_client(command)?,
@@ -875,7 +908,9 @@ pub(super) fn execute_client(command: ClientCommand) -> Result<(), String> {
         ClientCommand::Launch { .. } => ("launch-entrypoint", OperationPhase::Running),
         ClientCommand::Deploy { .. } => ("deploy-local", OperationPhase::Building),
     };
-    run_cli_operation("client", action, phase, |_context| execute_client_body(command))
+    run_cli_operation("client", action, phase, |_context| {
+        execute_client_body(command)
+    })
 }
 
 fn execute_client_body(command: ClientCommand) -> Result<(), String> {
@@ -2978,8 +3013,8 @@ mod client_launch_tests {
             ("shell", ClientLaunchMode::Shell),
             ("installer", ClientLaunchMode::Installer),
         ] {
-            let parsed = ShellCommand::try_parse_from(["vapor", "client", "launch", argument])
-                .unwrap();
+            let parsed =
+                ShellCommand::try_parse_from(["vapor", "client", "launch", argument]).unwrap();
             assert!(matches!(
                 parsed,
                 ShellCommand::Client {

@@ -391,9 +391,13 @@ impl HostCommand {
 impl HostSubcommand {
     fn into_shell_command(self) -> ShellCommand {
         match self {
-            HostSubcommand::Launch { current_workspace, command } => {
-                ShellCommand::Launch { current_workspace, command }
-            }
+            HostSubcommand::Launch {
+                current_workspace,
+                command,
+            } => ShellCommand::Launch {
+                current_workspace,
+                command,
+            },
             HostSubcommand::Client { command } => ShellCommand::Client { command },
             HostSubcommand::Source { command } => ShellCommand::Source { command },
             HostSubcommand::Installation => ShellCommand::Installation,
