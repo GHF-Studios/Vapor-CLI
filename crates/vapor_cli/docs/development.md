@@ -3,7 +3,7 @@
 ## Repository layout
 
 ```text
-crates/vapor_shell/
+crates/vapor_cli/
 ├── README.md
 ├── docs/
 ├── scripts/

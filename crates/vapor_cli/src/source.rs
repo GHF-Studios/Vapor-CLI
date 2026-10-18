@@ -79,7 +79,8 @@ pub(crate) struct SourceRepairReport {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GeneratedOutputKind {
     Binary,
-    Library,
+    RuntimeLibrary,
+    StaticCrate,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -571,8 +572,16 @@ pub(crate) fn scaffold_content_project(
     let mut cargo = format!(
         "[package]\nname = \"{crate_name}\"\nversion = \"{version}\"\nedition = \"2024\"\n"
     );
-    if output == GeneratedOutputKind::Library {
-        cargo.push_str("\n[lib]\ncrate-type = [\"rlib\", \"cdylib\"]\n");
+    if matches!(
+        output,
+        GeneratedOutputKind::RuntimeLibrary | GeneratedOutputKind::StaticCrate
+    ) {
+        let crate_types = match output {
+            GeneratedOutputKind::RuntimeLibrary => "\"rlib\", \"cdylib\"",
+            GeneratedOutputKind::StaticCrate => "\"rlib\", \"staticlib\"",
+            GeneratedOutputKind::Binary => unreachable!("binary output has no library crate types"),
+        };
+        cargo.push_str(&format!("\n[lib]\ncrate-type = [{crate_types}]\n"));
     }
     write(&root.join("Cargo.toml"), &cargo)?;
     match output {
@@ -580,7 +589,7 @@ pub(crate) fn scaffold_content_project(
             &root.join("src/main.rs"),
             &format!("fn main() {{ println!(\"Vapor Engine {content_id}\"); }}\n"),
         )?,
-        GeneratedOutputKind::Library => write(
+        GeneratedOutputKind::RuntimeLibrary | GeneratedOutputKind::StaticCrate => write(
             &root.join("src/lib.rs"),
             &format!("#![forbid(unsafe_code)]\n\npub const CONTENT_ID: &str = \"{content_id}\";\n"),
         )?,
@@ -594,7 +603,8 @@ pub(crate) fn content_project_output(kind: ContentKind) -> Option<GeneratedOutpu
         ContentKind::Game
         | ContentKind::EngineMod
         | ContentKind::GameMod
-        | ContentKind::ExtensionMod => Some(GeneratedOutputKind::Library),
+        | ContentKind::ExtensionMod => Some(GeneratedOutputKind::RuntimeLibrary),
+        ContentKind::Crate => Some(GeneratedOutputKind::StaticCrate),
         ContentKind::Packagepack
         | ContentKind::Enginepack
         | ContentKind::Gamepack

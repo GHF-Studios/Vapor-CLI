@@ -13,5 +13,5 @@ version = "1.97.0"
 date = "2026-07-09"
 
 [[project]]
-name = "vapor-shell"
+name = "vapor-cli"
 path = "."

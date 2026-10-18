@@ -47,6 +47,10 @@ pub enum ShellCommand {
         /// current directory.
         #[arg(long)]
         current_workspace: bool,
+        /// Mark this local development run as a profiling session.
+        /// This starts telemetry session capture; use the Devtools/Tracy UI for analysis.
+        #[arg(long)]
+        profiling: bool,
         /// Installed composition to launch. Omit to launch the app's default composition.
         #[command(subcommand)]
         command: Option<LaunchCommand>,
@@ -159,6 +163,13 @@ pub enum ShellCommand {
         command: ProviderCommand,
     },
 
+    /// Open or inspect tools managed by the pinned Vapor toolchain.
+    Toolchain {
+        /// Toolchain operation.
+        #[command(subcommand)]
+        command: ToolchainCommand,
+    },
+
     /// Author workspaces and content, and manage SDK release operations.
     Sdk {
         /// Arguments accepted by the SDK command surface.
@@ -189,6 +200,13 @@ pub enum LaunchCommand {
     },
     /// Launch the currently selected installed packagepack composition.
     Selected,
+}
+
+/// Utilities installed by the version-pinned Vapor toolchain.
+#[derive(Debug, Subcommand)]
+pub enum ToolchainCommand {
+    /// Open Tracy for live capture and trace inspection.
+    Tracy,
 }
 
 #[derive(Debug, Subcommand)]
@@ -735,16 +753,22 @@ fn operation_descriptor(
         ShellCommand::Launch {
             current_workspace: false,
             command: Some(LaunchCommand::Default { .. }),
+            ..
         }
         | ShellCommand::Launch {
             current_workspace: false,
             command: None,
+            ..
         } => ("runtime", "launch-default", Phase::Resolving),
         ShellCommand::Launch {
             current_workspace: false,
             command: Some(LaunchCommand::Selected),
+            ..
         } => ("runtime", "launch-selected", Phase::Resolving),
-        ShellCommand::Client { .. } | ShellCommand::Script { .. } | ShellCommand::Exit => {
+        ShellCommand::Client { .. }
+        | ShellCommand::Script { .. }
+        | ShellCommand::Toolchain { .. }
+        | ShellCommand::Exit => {
             return None;
         }
         ShellCommand::Source { command } => match command {
@@ -851,10 +875,16 @@ fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control
     match command {
         ShellCommand::Launch {
             current_workspace,
+            profiling,
             command,
         } => {
-            execute_launch(command, current_workspace, state)?;
+            execute_launch(command, current_workspace, profiling, state)?;
         }
+        ShellCommand::Toolchain { command } => match command {
+            ToolchainCommand::Tracy => vapor_core::DeveloperEnvironment::discover()
+                .and_then(|environment| environment.launch_tracy())
+                .map_err(|error| error.to_string())?,
+        },
         ShellCommand::Client { command } => execute_client(command)?,
         ShellCommand::Source { command } => execute_source(command, state)?,
         ShellCommand::Installation => {
@@ -956,6 +986,7 @@ fn execute_client_body(command: ClientCommand) -> Result<(), String> {
 fn execute_launch(
     command: Option<LaunchCommand>,
     current_workspace: bool,
+    profiling: bool,
     state: &ShellState,
 ) -> Result<(), String> {
     if current_workspace {
@@ -974,8 +1005,14 @@ fn execute_launch(
             workspace.manifest.workspace.name,
             workspace.root.display(),
         );
-        return vapor_core::run_workspace_configuration(&workspace, "default")
-            .map_err(|error| error.to_string());
+        return vapor_core::run_workspace_configuration_with_profile_hint(
+            &workspace, "default", profiling,
+        )
+        .map_err(|error| error.to_string());
+    }
+
+    if profiling {
+        return Err("`--profiling` is supported with `launch --current-workspace`; installed game launches are not Vapor Development Sessions.".to_owned());
     }
 
     match command.unwrap_or(LaunchCommand::Default { account: None }) {

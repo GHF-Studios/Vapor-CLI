@@ -1,5 +1,5 @@
 [package]
-name = "vapor_shell"
+name = "vapor_cli"
 version.workspace = true
 edition.workspace = true
 readme = "README.md"
@@ -13,9 +13,8 @@ clap.workspace = true
 clap-repl.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-semver.workspace = true
 shlex.workspace = true
 toml.workspace = true
-toml_edit.workspace = true
 vapor_sdk_cli = { path = "../vapor_sdk_cli" }
 vapor_core.workspace = true
+vapor_client_provider.workspace = true

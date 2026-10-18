@@ -301,6 +301,9 @@ enum HostSubcommand {
     Launch {
         #[arg(long)]
         current_workspace: bool,
+        /// Mark this local development run as a profiling session.
+        #[arg(long)]
+        profiling: bool,
         #[command(subcommand)]
         command: Option<LaunchCommand>,
     },
@@ -393,9 +396,11 @@ impl HostSubcommand {
         match self {
             HostSubcommand::Launch {
                 current_workspace,
+                profiling,
                 command,
             } => ShellCommand::Launch {
                 current_workspace,
+                profiling,
                 command,
             },
             HostSubcommand::Client { command } => ShellCommand::Client { command },

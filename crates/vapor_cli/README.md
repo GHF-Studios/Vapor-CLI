@@ -80,7 +80,7 @@ the app-local Rust/Cargo toolchain. Deploy it into the Steam app directory
 first:
 
 ```text
-crates/vapor_shell/scripts/bootstrap-local-app-deploy.sh \
+crates/vapor_cli/scripts/bootstrap-local-app-deploy.sh \
   --binary /path/to/built/vapor \
   --target "$HOME/.local/share/Steam/steamapps/common/Loo Cast" \
   --yes
