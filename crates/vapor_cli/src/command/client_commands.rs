@@ -14,7 +14,7 @@ use std::{
 use vapor_client::{Client, ClientHostConfig, service_sibling_path};
 use vapor_client_protocol::{
     AuthoringResultKind, ClientAction, ClientEvent, ClientResponseKind, CompositionAction,
-    OperationStatus, ProtocolFrame, WorkshopAction,
+    OperationStatus, ProtocolFrame, WorkshopAction, WorkspaceAction,
 };
 use vapor_core::{LocalClientDeploymentOutcome, OperationPhase, deploy_client_locally};
 
@@ -81,19 +81,22 @@ pub(super) fn execute_launch(
                     .to_owned(),
             );
         }
-        let workspace = vapor_core::VaporWorkspace::discover().map_err(|error| {
-            format!("could not discover a Vapor workspace from the current directory: {error}")
-        })?;
+        let workspace_root = std::env::current_dir()
+            .map_err(|error| format!("could not read the current directory: {error}"))?;
         println!(
-            "Launching {}/{} from {} with its default Run Configuration…",
-            workspace.manifest.workspace.organization,
-            workspace.manifest.workspace.name,
-            workspace.root.display(),
+            "Launching the default Run Configuration from {} through the Vapor Client service…",
+            workspace_root.display(),
         );
-        return vapor_core::run_workspace_configuration_with_profile_hint(
-            &workspace, "default", profiling,
-        )
-        .map_err(|error| error.to_string());
+        let event = send_client_action(
+            &mut connect_client_service(state)?,
+            ClientAction::Workspace(WorkspaceAction::RunConfiguration {
+                workspace_root: workspace_root.display().to_string(),
+                configuration: "default".to_owned(),
+                profiling,
+            }),
+        )?;
+        print_service_operation_message(event);
+        return Ok(());
     }
 
     if profiling {
