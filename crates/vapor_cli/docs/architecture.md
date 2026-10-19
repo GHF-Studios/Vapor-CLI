@@ -74,8 +74,10 @@ submit intent.
 The frontends are not yet pure facades. CLI still owns some source discovery and
 Cargo metadata projection, runtime-target selection, root local deployment and
 package staging, plus OS-level executable handoff and initial Client deployment.
-Workspace tool subprocess output is not yet an operation event stream; at
-present it is written by the service process. These are known boundary gaps,
+Workspace-tool stdout and stderr now travel as operation-scoped Client events:
+CLI renders them to their original terminal streams, while Studio keeps a
+bounded output view. The service captures and bounds each output line before
+forwarding it. The remaining host/bootstrap boundaries are genuine local work,
 not evidence that CLI and Studio have separate content authorities.
 
 `ShellState` owns the CLI's discovered installation/source roots and its

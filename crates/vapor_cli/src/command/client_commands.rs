@@ -493,6 +493,25 @@ fn send_client_action_inner(
                     }
                 }
             }
+            ProtocolFrame::Event(ClientEvent::OperationOutput(output))
+                if output.id == operation_id =>
+            {
+                finish_cli_progress(last_rendered_progress.is_some());
+                last_rendered_progress = None;
+                let write_result = match output.stream {
+                    vapor_client_protocol::OperationOutputStream::Stdout => {
+                        let mut stdout = std::io::stdout().lock();
+                        writeln!(stdout, "{}", output.text).and_then(|_| stdout.flush())
+                    }
+                    vapor_client_protocol::OperationOutputStream::Stderr => {
+                        let mut stderr = std::io::stderr().lock();
+                        writeln!(stderr, "{}", output.text).and_then(|_| stderr.flush())
+                    }
+                };
+                write_result.map_err(|error| {
+                    format!("could not render managed operation output: {error}")
+                })?;
+            }
             ProtocolFrame::Event(ClientEvent::AuthoringResult(result))
                 if expects_authoring_result && result.operation_id == operation_id =>
             {
