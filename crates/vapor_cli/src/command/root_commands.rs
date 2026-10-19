@@ -7,18 +7,11 @@ use super::content_commands::open_workspace_in_service;
 use super::{RootCommand, ShellState, resolve_publish_runtime_targets, resolve_runtime_targets};
 use crate::{
     app_local_tools::AppToolRequirement,
-    discovery::EnvironmentPaths,
     distribution::StageOptions,
-    documentation,
     metadata::{ResolvedMetadata, ValidationPlan},
-    steam,
-    workflow::{self, CargoWorkflow},
-    workspace::WorkspaceManifest,
+    workflow::CargoWorkflow,
 };
-use std::{
-    path::PathBuf,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 use vapor_client_protocol::{ClientAction, ClientEvent, ProtocolFrame, PublishingAction};
 
 pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(), String> {
@@ -59,13 +52,25 @@ pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(
                     .app_local_tools(&[AppToolRequirement::Rust])
                     .workspace(),
             )?;
-            let paths = state.active_paths()?;
             let workspace_manifest = metadata.workspace_manifest()?;
             let targets =
                 resolve_runtime_targets(workspace_manifest, &target, release_targets, host_only)?;
-            let report =
-                deploy_root_outputs(paths, workspace_manifest, &targets, skip_docs, false)?;
-            print_root_output_report(&report);
+            let mut client = connect_client_service(state)?;
+            open_workspace_in_service(&mut client, state)?;
+            let event = send_client_action(
+                &mut client,
+                ClientAction::Workspace(
+                    vapor_client_protocol::WorkspaceAction::DeployApplication {
+                        target_triples: targets.clone(),
+                        skip_documentation: skip_docs,
+                    },
+                ),
+            )?
+            .ok_or_else(|| {
+                "Vapor Client accepted application deployment without returning its completion"
+                    .to_owned()
+            })?;
+            print_service_operation_message(Some(event));
             println!(
                 "hint: package the local app with `root package` or publish with `root publish`"
             );
@@ -87,33 +92,21 @@ pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(
                 release_targets,
                 host_only,
             )?;
-            let stage_options = StageOptions::runtime().with_runtime_targets(targets.clone());
-            let report = refresh_root_outputs(
-                state,
-                state.active_paths()?,
-                metadata.workspace_manifest()?,
-                &targets,
-                false,
-            )?;
-            print_root_output_report(&report);
-            let distribution_manifest = metadata.distribution_manifest()?;
-            let report = crate::distribution::stage_with_options(
-                state.active_paths()?,
-                distribution_manifest,
-                stage_options.clone(),
-            )?;
-            steam::smoke(&report, &stage_options)?;
-            println!(
-                "packaged {} files at {}",
-                report.files(),
-                report.root().display()
-            );
-            println!("payload: split runtime depots");
-            println!(
-                "runtime targets: {}",
-                stage_options.runtime_targets().join(", ")
-            );
-            print_staged_depots(distribution_manifest, &report);
+            let mut client = connect_client_service(state)?;
+            open_workspace_in_service(&mut client, state)?;
+            let event = send_client_action(
+                &mut client,
+                ClientAction::Workspace(
+                    vapor_client_protocol::WorkspaceAction::PackageApplication {
+                        target_triples: targets,
+                    },
+                ),
+            )?
+            .ok_or_else(|| {
+                "Vapor Client accepted application packaging without returning its completion"
+                    .to_owned()
+            })?;
+            print_service_operation_message(Some(event));
             println!("hint: preview Steam upload with `root publish --dry-run`");
         }
         RootCommand::Publish {
@@ -260,80 +253,6 @@ fn wait_for_application_release_review(
                 );
             }
         }
-    }
-}
-
-struct RootOutputReport {
-    promoted: usize,
-    docs: Option<PathBuf>,
-    scripts: usize,
-    app_root_tools: usize,
-    launch_scripts: usize,
-}
-
-fn refresh_root_outputs(
-    state: &ShellState,
-    paths: &EnvironmentPaths,
-    manifest: &WorkspaceManifest,
-    targets: &[String],
-    skip_docs: bool,
-) -> Result<RootOutputReport, String> {
-    run_root_workflow_targets(state, CargoWorkflow::BuildRelease, targets)?;
-    deploy_root_outputs(paths, manifest, targets, skip_docs, true)
-}
-
-fn deploy_root_outputs(
-    paths: &EnvironmentPaths,
-    manifest: &WorkspaceManifest,
-    targets: &[String],
-    skip_docs: bool,
-    release: bool,
-) -> Result<RootOutputReport, String> {
-    let promoted = if release {
-        workflow::promote_release_for_targets(paths, manifest, targets)?
-    } else {
-        workflow::promote_for_targets(paths, manifest, targets)?
-    };
-    let docs = if skip_docs {
-        None
-    } else {
-        Some(documentation::build(paths, manifest)?)
-    };
-    let assets = vapor_client_provider::app_root::sync_release_assets(paths, targets)?;
-    Ok(RootOutputReport {
-        promoted,
-        docs,
-        scripts: assets.scripts,
-        app_root_tools: assets.tools,
-        launch_scripts: assets.launch_scripts,
-    })
-}
-
-fn print_root_output_report(report: &RootOutputReport) {
-    println!("promoted {} installation binaries", report.promoted);
-    if let Some(docs) = &report.docs {
-        println!("docs: {}", docs.display());
-    } else {
-        println!("docs: skipped");
-    }
-    println!("scripts: {} file(s)", report.scripts);
-    println!("app-root tools: {} file(s)", report.app_root_tools);
-    println!("launch scripts: {} file(s)", report.launch_scripts);
-}
-
-fn print_staged_depots(
-    manifest: &crate::distribution::DistributionManifest,
-    report: &crate::distribution::StageReport,
-) {
-    println!("depots:");
-    for depot in report.depots() {
-        println!(
-            "  {} ({}, {}): {}",
-            manifest.application().depot_id(depot.kind()),
-            depot.kind().label(),
-            depot.kind().steam_os_rule(),
-            depot.root().display()
-        );
     }
 }
 
