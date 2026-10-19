@@ -213,24 +213,6 @@ struct SourceMetadata {
 #[serde(rename_all = "kebab-case")]
 struct LaunchMetadata {
     target: Option<String>,
-    selected_packagepack: Option<ContentSelectionMetadata>,
-    engine_handoff: Option<EngineHandoffMetadata>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "kebab-case")]
-struct ContentSelectionMetadata {
-    artifact_id: String,
-    root: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "kebab-case")]
-struct EngineHandoffMetadata {
-    engine_id: String,
-    root: String,
-    runtime_target: String,
-    binary: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -373,39 +355,6 @@ pub(crate) fn record_launch_target(target: &str) {
     if let Some(run) = RUN.get() {
         let target = redact_text(target);
         run.update_metadata(|metadata| metadata.launch.target = Some(target));
-    }
-}
-
-pub(crate) fn record_selected_packagepack(artifact_id: &str, root: &Path) {
-    if let Some(run) = RUN.get() {
-        let artifact_id = redact_text(artifact_id);
-        let root = display_path(root);
-        run.update_metadata(|metadata| {
-            metadata.launch.selected_packagepack =
-                Some(ContentSelectionMetadata { artifact_id, root });
-        });
-    }
-}
-
-pub(crate) fn record_engine_handoff(
-    engine_id: &str,
-    root: &Path,
-    runtime_target: &str,
-    binary: &Path,
-) {
-    if let Some(run) = RUN.get() {
-        let engine_id = redact_text(engine_id);
-        let root = display_path(root);
-        let runtime_target = redact_text(runtime_target);
-        let binary = display_path(binary);
-        run.update_metadata(|metadata| {
-            metadata.launch.engine_handoff = Some(EngineHandoffMetadata {
-                engine_id,
-                root,
-                runtime_target,
-                binary,
-            });
-        });
     }
 }
 

@@ -81,12 +81,18 @@ payload is split by the manifest-declared Steam depot includes:
   `examples/vapor-examples/` when the root source includes official examples.
 - `linux/` contains Linux runtime files: selected Linux `bin/<target>/`
   application binaries including `vapor`, `vapor-entrypoint`,
-  `vapor-installer`, `vapor-gui`, and `vapor-ide-host`, plus
-  `bin/vapor-launch.sh`.
+  `vapor-installer`, `vapor-gui`, `vapor-client-service`, and
+  `vapor-ide-host`, plus `libsteam_api.so` and `bin/vapor-launch.sh`.
 - `windows/` contains Windows runtime files: selected Windows `bin/<target>/`
   application binaries including `vapor.exe`, `vapor-entrypoint.exe`,
-  `vapor-installer.exe`, `vapor-gui.exe`, and `vapor-ide-host.exe`, required
-  Windows runtime DLLs, plus `bin/vapor-launch.cmd`.
+  `vapor-installer.exe`, `vapor-gui.exe`, `vapor-client-service.exe`, and
+  `vapor-ide-host.exe`, including `steam_api64.dll` and other required Windows
+  runtime DLLs, plus `bin/vapor-launch.cmd`.
+
+The service owns the Steamworks native library metadata and runtime packaging
+rule. `vapor-client-service` embeds a relative loader path on Linux and resolves
+its sibling DLL on Windows. Installer launches without requiring the shared
+service so recovery remains available when service startup fails.
 
 Source repositories, Cargo build targets, Cargo registries, Git checkouts,
 Steam authentication, installer logs, generated app-root state, and SteamPipe
@@ -109,6 +115,11 @@ staging. Repeat `--target` to build and stage a deliberate custom subset. Use
 other platform launch scripts. Staging always includes the common depot plus
 the platform depots implied by the selected targets, and fails when a selected
 `bin/<target>/` directory is missing after the build refresh.
+
+`root package` and real `root publish` compile and promote Cargo's optimized
+release profile from `output/release/`. `root build` and `root deploy` remain
+developer-profile operations under `output/dev/`. This keeps debug symbols and
+development outputs out of the Steam depot.
 
 Real `root publish` does not accept custom target subsets, `--host-only`, or
 `--skip-build`. It validates, builds, promotes, stages, and uploads the complete

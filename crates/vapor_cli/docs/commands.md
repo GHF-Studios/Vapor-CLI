@@ -60,38 +60,22 @@ managed Rust toolchain. This is the PWD-sensitive source-run path; it inherits t
 launching process environment, including a running Steam client when the game
 needs one.
 
-### `launch default [--account ACCOUNT]`
+### `launch default`
 
-Launch the app manifest's default packagepack composition. The `default`
-selector is declared by `App.vapor.toml` through a `[[root.content]]`
-packagepack seed.
-
-The command verifies installed content, reads the selected packagepack's
-declared dependency roles, resolves the required `engine` dependency by content
-ID, records any declared `game` dependency by content ID, and hands off to the
-resolved engine artifact's runtime binary declared by its deployed
-`Engine.vapor.toml`. Engine/game identities are content data, not built-in
-Vapor Shell knowledge.
-
-On Linux/Steam desktop starts without a terminal, this command opens the same
-Konsole-owned terminal path used by the Shell so terminal-based runtime output
-remains visible.
-
-If content is not installed yet, the command uses the app-root content seed to
-download/cache/install/select the default packagepack and its dependency
-closure. It still does not silently install the development toolchain. Missing
-player-mode tooling reports
-`<app-root>/resources/vapor/tools/production/app_setup/setup_player.rs`;
-missing development tooling reports the matching app-root
-`setup_development.rs`.
-
-Workshop downloads use anonymous SteamCMD by default. Use `--account ACCOUNT`
-only for deliberately private app/content testing.
+Launch the app manifest's default playable composition through the shared
+Vapor Client service. If its default Packagepack has not yet been recorded in
+the composition, the service resolves the app's `default` Packagepack seed.
+The service owns dependency acquisition, installation state, verification, and
+the game handoff. Workshop acquisition uses the signed-in Steam client account.
 
 ### `launch selected`
 
-Launch the currently selected installed packagepack composition without
-changing selection or installing the app manifest default.
+Launch the composition selected in Studio through the same service, without
+changing selection. If no playable composition is selected, open Studio and
+choose one first.
+
+`launch --current-workspace` remains the separate developer path for running a
+workspace's default source configuration with the managed Rust toolchain.
 
 ## Diagnostics
 
@@ -334,21 +318,24 @@ scripts may run `ide status` and `ide repair --dry-run`, but not real
 
 ## Root application/depot workflows
 
-### `root build [--target TARGET]... [--release-targets] [--host-only]`
+### `root build [--release] [--target TARGET]... [--release-targets] [--host-only]`
 
 Build installable Cargo workspaces into app-root build outputs under
-`output/dev/<project>/`. Installable means a workspace declares at least one
+`output/dev/<project>/`, or `output/release/<project>/` with `--release`.
+Installable means a workspace declares at least one
 `[workspace].binaries` entry. When `[root.runtime].targets` is declared,
 omitting target flags builds that full runtime matrix by default. Repeat
 `--target` to build an explicit custom subset, such as only Windows GNU/LLVM.
+`--release` uses Cargo's optimized profile and does not promote outputs.
 
 `root build` does not refresh installed app binaries, docs, Vapor scripts, or
 launch scripts. Use `root deploy` to promote already-built app outputs into the
 local Steam/app root.
 
-`--release-targets` is accepted as an explicit spelling of the manifest-matrix
-default. Use `--host-only` for a local smoke pass that builds only Cargo's host
-target. Do not combine `--target`, `--release-targets`, and `--host-only`.
+`--release-targets` is an explicit spelling of the manifest target-matrix
+default; it does not select Cargo's release profile. Use `--host-only` for a
+local smoke pass that builds only Cargo's host target. Do not combine `--target`,
+`--release-targets`, and `--host-only`.
 
 ### `root deploy [--skip-docs] [--target TARGET]... [--release-targets] [--host-only]`
 
@@ -364,7 +351,8 @@ faster binary/script refresh.
 
 ### `root package [--target TARGET]... [--release-targets] [--host-only]`
 
-Build and refresh the local Steam app root, assemble the clean allowlisted
+Build and refresh the local Steam app root using Cargo's optimized release
+profile, assemble the clean allowlisted
 split-depot app payload, and smoke-check the staged package without invoking
 SteamCMD. The default root payload is runtime-only: the common depot carries
 `App.vapor.toml`, `docs/`, app scripts, and packaged examples; platform depots
@@ -412,16 +400,18 @@ artifacts, not application depot roots.
 
 ### `content list`
 
-List registered source content artifacts when a source is open and list
-installed content recorded in the app-owned content index. A child directory is
-source content only when the active workspace registers it under
-`[[workspace.projects]]` and the child role manifest declares a content identity.
+Refresh the shared Vapor Client catalog and show authored workspace content,
+downloaded Library items, and installed content from the same read model. A
+child directory is source content only when the active workspace registers it
+under `[[workspace.projects]]` and the child role manifest declares a content
+identity. Incomplete or failed catalog refreshes are reported as errors instead
+of being shown as an empty Library.
 
 ### `content validate [ARTIFACT]`
 
 Validate source content metadata, required composition/dependency references,
-conflicts, and Workshop publication intent. Omit `ARTIFACT` to validate every
-registered source artifact.
+conflicts, and Workshop publication intent through the shared service. Omit
+`ARTIFACT` to validate every registered source artifact.
 
 ### `content build [--target TARGET]... [--release-targets] [--host-only]`
 
@@ -434,10 +424,10 @@ explicit custom subset such as only `x86_64-pc-windows-gnullvm`. Use
 
 ### `content deploy ARTIFACT [--select] [--target TARGET]... [--release-targets] [--host-only]`
 
-Build the active content workspace and install the selected source artifact into
-the app-owned installed-content tree. Dependencies present in the same source
-workspace are installed first. Declared `binaries` and `libraries` are copied
-from app-local Cargo output into each deployed artifact root under
+Install the selected source artifact into the app-owned installed-content tree
+through Vapor Client. The service builds the selected artifact and its required
+source dependencies as part of installation. Declared `binaries` and
+`libraries` are copied from app-local Cargo output into each deployed artifact root under
 `bin/<target>/` and `lib/<target>/`. This is local-only: it does not create,
 publish, delete, subscribe to, or upload Workshop items.
 
@@ -448,11 +438,12 @@ iteration on the current machine.
 
 ### `content package ARTIFACT [--target TARGET]... [--release-targets] [--host-only] [--dry-run]`
 
-Stage one deployable artifact root under `output/content/packages/`, write a
-resolved deployed role manifest, fingerprint the staged root, and record a
-receipt. Declared `binaries` and `libraries` are copied from app-local Cargo
-output into `bin/<target>/` and `lib/<target>/`, and the deployed manifest
-records the staged filenames in target-specific `runtime` entries. When
+Stage one deployable artifact root under `output/content/packages/` through the
+shared Client service, write a resolved deployed role manifest, fingerprint
+the staged root, and record a receipt. Declared `binaries` and `libraries` are
+copied from app-local Cargo output into `bin/<target>/` and `lib/<target>/`, and
+the deployed manifest records the staged filenames in target-specific
+`runtime` entries. When
 `[workspace.runtime].targets` is declared, omitting target flags stages that
 full matrix into one package root. Repeat `--target` for an intentional custom
 subset, or use `--host-only` for a local host-only package.
@@ -469,28 +460,27 @@ fingerprint without writing package files.
 
 ### `content acquire ARTIFACT_OR_WORKSHOP_ID`
 
-Acquire content into the app-owned cache. Source artifacts are packaged and
-cached locally. Cached Workshop IDs can be reused. A live uncached Workshop
-download requires a SteamUGC-enabled provider session; this build reports that
-provider boundary when no cache exists.
+Acquire a local authored artifact into the Library cache, or acquire a numeric
+Steam Workshop item through the shared Vapor Client service and Steamworks.
 
-### `content subscribe ARTIFACT_OR_WORKSHOP_ID`
+### `content subscribe PUBLISHED_FILE_ID`
 
-Subscribe to or otherwise acquire content through controlled providers. The
-current implementation shares the safe acquire/cache path and records the
-provider boundary when live SteamUGC subscription is unavailable.
+Subscribe to the Steam Workshop item and request it for the Library through the
+shared service. Steam subscription state remains distinct from local Library
+availability and composition membership.
 
 ### `content download ARTIFACT_OR_WORKSHOP_ID...`
 
-Download one or more content items into the app-owned cache. Source artifacts
-use the local package/cache path. Numeric PublishedFileIds with
-`--account ACCOUNT` are downloaded through one SteamCMD provider session.
+Download Workshop PublishedFileIds through the shared service. Cache authored
+local artifacts through its typed Library operation; keep authored selectors
+and Workshop IDs in separate commands.
 
 ### `content install ARTIFACT_OR_WORKSHOP_ID [--account ACCOUNT]`
 
-Install source or cached content into `content/installed/`, resolving required
-local dependency/composition edges first. Installation writes a content index,
-per-artifact lock, fingerprint, and receipt.
+Run installation through the shared Client service. When this shell has a source
+workspace open, it is passed as operation context; otherwise install resolves
+from Vapor's cache and provider sources. Required dependencies are installed
+with the target.
 
 If the selector matches a root content seed or numeric PublishedFileId and no
 cache exists, Vapor downloads it through SteamCMD before installing. Use
@@ -498,32 +488,33 @@ cache exists, Vapor downloads it through SteamCMD before installing. Use
 
 ### `content update [ARTIFACT_OR_WORKSHOP_ID]`
 
-Reinstall one installed item, or every installed item when omitted, from source
-or cache.
+Update one installed item, or every installed item when omitted, through the
+shared Client service, using the current source workspace when available.
 
 ### `content verify [ARTIFACT_OR_WORKSHOP_ID]`
 
-Compare installed artifact roots against app-owned fingerprints and receipts.
-Omit the target to verify everything in the installed-content index.
+Verify installed artifacts through the shared Client service. Omit the target
+to verify everything in the installed-content index.
 
 ### `content selected`
 
-Print the currently selected packagepack, if one is recorded in app-owned
-content state.
+Print the Packagepack root of the currently selected playable composition.
+This reads the same persistent composition state used by Studio and Play.
 
 ### `content select ARTIFACT_OR_WORKSHOP_ID`
 
-Select an installed, enabled packagepack for play. Selection writes
-`.vapor/state/content/selection.toml` and an operation receipt.
+Set the active composition's Packagepack root to an installed Packagepack.
+Studio and `launch selected` use this same persistent composition choice.
 
 ### `content deselect`
 
-Clear the selected packagepack.
+Clear the active composition's Packagepack root.
 
 ### `content repair [ARTIFACT_OR_WORKSHOP_ID]`
 
 Verify installed content, quarantine corrupted artifact roots under
-`content/quarantine/`, and reinstall from source or cache when available.
+`content/quarantine/`, and reinstall from the current source workspace or
+Vapor's cache when available. Omit the target to repair all installed items.
 
 ### `content disable ARTIFACT_OR_WORKSHOP_ID`
 
@@ -537,29 +528,32 @@ index.
 
 ### `content uninstall ARTIFACT_OR_WORKSHOP_ID`
 
-Remove installed or disabled artifact roots and delete the app-owned
-installed-state record. Dependency artifact roots are not removed implicitly;
-uninstall them explicitly when desired.
+Remove installed or disabled artifact roots through the shared Client service.
+Direct mutations that would invalidate a composition's resolved graph are
+rejected; use that composition's install, update, or repair workflow instead.
 
 ### `content create ARTIFACT [--target TARGET]... [--release-targets] [--host-only] [--dry-run] [--account ACCOUNT] [--yes]`
 
-Record a safe preview of creating a new Workshop item, or create it through the
-controlled SteamCMD provider when manually confirmed. Real item creation is a
-SteamUGC authority-changing action and must be typed manually in the
-interactive shell. When `[workspace.runtime].targets` is declared, creation uses
-that matrix by default. Real creation rejects `--target` and `--host-only` and
-requires the declared matrix to contain Linux and Windows targets. It validates
-and builds that matrix before packaging and upload. Real creation preflight
-requires app-local Rust/Cargo, cross-build tooling, and SteamCMD. Repeat
-`--target` or use `--host-only` only for dry-run previews.
+Stage a service-owned Workshop review for a new item, or publish that reviewed
+package after explicit confirmation. A dry-run shows the package identity,
+target matrix, fingerprint, files, and dependencies without uploading. Real
+item creation is a Steam authority-changing action and must be typed manually
+in the interactive shell. When `[workspace.runtime].targets` is declared,
+creation uses that matrix by default. Real creation rejects `--target` and
+`--host-only` and requires the declared matrix to contain Linux and Windows
+targets. It validates and builds that matrix before packaging and upload. Real
+creation preflight requires app-local Rust/Cargo, cross-build tooling, and
+SteamCMD. Repeat `--target` or use `--host-only` only for dry-run previews.
 
 ### `content publish ARTIFACT... [--target TARGET]... [--release-targets] [--host-only] [--dry-run] [--account ACCOUNT] [--change-note TEXT] [--yes]`
 
-Package one or more artifacts and write Workshop provider VDFs. `--dry-run`
-performs no upload. A real upload requires `--account ACCOUNT`, `--yes`,
-existing PublishedFileIds in the artifacts' role manifests, and must be
-typed manually in the interactive shell. Multiple artifacts are sent through one
-SteamCMD provider session. When `[workspace.runtime].targets` is declared,
+Stage a service-owned review for one artifact or preview a multi-artifact
+provider batch. A single-artifact dry-run shows the package identity, target
+matrix, fingerprint, files, and dependencies without uploading. Multi-artifact
+publication remains one provider batch transaction. A real upload requires
+`--account ACCOUNT`, `--yes`, existing PublishedFileIds in the artifacts' role
+manifests, and must be typed manually in the interactive shell. When
+`[workspace.runtime].targets` is declared,
 publishing packages that matrix by default. Real publication rejects `--target`
 and `--host-only` and requires the declared matrix to contain Linux and Windows
 targets. It validates and builds that matrix before packaging and upload.

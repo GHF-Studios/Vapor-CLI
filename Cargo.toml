@@ -15,3 +15,5 @@ shlex = "1.3"
 toml = "1.1"
 vapor_core = { path = "../Vapor/crates/vapor_core" }
 vapor_client_provider = { path = "../Vapor/crates/vapor_client_provider" }
+vapor_client = { path = "../Vapor/crates/vapor_client" }
+vapor_client_protocol = { path = "../Vapor/crates/vapor_client_protocol" }

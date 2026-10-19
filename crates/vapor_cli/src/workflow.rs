@@ -3,15 +3,15 @@
 use crate::{
     cross_toolchain,
     discovery::{EnvironmentPaths, ensure_contained},
-    workspace::{CargoProject, WorkspaceManifest},
+    workspace::WorkspaceManifest,
 };
 use std::{
     env,
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
-    process::Command,
 };
+pub(crate) use vapor_client_provider::host_runtime_target;
 
 /// Dynamic Cargo workspace selection.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,6 +59,8 @@ pub enum CargoWorkflow {
     Test,
     /// Build every workspace package.
     Build,
+    /// Build every workspace package with Cargo's optimized release profile.
+    BuildRelease,
     /// Check formatting, compile, test, lint, and build documentation.
     Validate,
 }
@@ -70,65 +72,10 @@ impl CargoWorkflow {
             Self::Check => "check",
             Self::Test => "test",
             Self::Build => "build",
+            Self::BuildRelease => "build --release",
             Self::Validate => "validate",
         }
     }
-}
-
-/// Execute a workflow for the selected Cargo workspace or all workspaces.
-///
-/// Build artifacts are written beneath the app root at
-/// `output/dev/<project>`. The host `PATH` is retained only for non-Rust host
-/// tools such as a system linker; Cargo and Rustc resolve from the installation.
-///
-/// # Errors
-///
-/// Fails when bundled Cargo is unavailable, the configured project is missing,
-/// environment construction fails, or any Cargo child exits unsuccessfully.
-pub fn run(
-    paths: &EnvironmentPaths,
-    manifest: &WorkspaceManifest,
-    selection: ProjectSelection,
-    workflow: CargoWorkflow,
-) -> Result<(), String> {
-    run_with_target(paths, manifest, selection, workflow, None)
-}
-
-/// Execute a workflow for a selected Cargo target triple.
-///
-/// `None` uses Cargo's host-default target and keeps the historical
-/// `output/dev/<workspace>/debug` output shape. A target triple passes
-/// `--target TRIPLE` to target-aware Cargo operations.
-pub fn run_with_target(
-    paths: &EnvironmentPaths,
-    manifest: &WorkspaceManifest,
-    selection: ProjectSelection,
-    workflow: CargoWorkflow,
-    target_triple: Option<&str>,
-) -> Result<(), String> {
-    validate_target_triple(target_triple)?;
-    let projects = selected_projects(manifest, selection)?;
-    for project in projects {
-        if workflow == CargoWorkflow::Validate {
-            for step in [
-                ValidationStep::FmtCheck,
-                ValidationStep::Check,
-                ValidationStep::Test,
-                ValidationStep::Clippy,
-                ValidationStep::Doc,
-            ] {
-                run_step(paths, project, step, target_triple)?;
-            }
-        } else {
-            run_step(
-                paths,
-                project,
-                ValidationStep::Workflow(workflow),
-                target_triple,
-            )?;
-        }
-    }
-    Ok(())
 }
 
 /// Promote configured build artifacts into the installation's target-specific
@@ -158,6 +105,24 @@ pub fn promote_for_targets(
     manifest: &WorkspaceManifest,
     target_triples: &[String],
 ) -> Result<usize, String> {
+    promote_for_targets_in_profile(paths, manifest, target_triples, "dev")
+}
+
+/// Promote configured release-profile artifacts into the target-specific app bin.
+pub fn promote_release_for_targets(
+    paths: &EnvironmentPaths,
+    manifest: &WorkspaceManifest,
+    target_triples: &[String],
+) -> Result<usize, String> {
+    promote_for_targets_in_profile(paths, manifest, target_triples, "release")
+}
+
+fn promote_for_targets_in_profile(
+    paths: &EnvironmentPaths,
+    manifest: &WorkspaceManifest,
+    target_triples: &[String],
+    profile: &str,
+) -> Result<usize, String> {
     let targets = RuntimeTarget::many(target_triples)?;
     let installation = paths.installation().root();
     let mut promoted = 0;
@@ -166,7 +131,7 @@ pub fn promote_for_targets(
             for target in &targets {
                 let filename = target.binary_file_name(binary);
                 let source = target
-                    .build_output_root(installation, project.name())
+                    .build_output_root(installation, project.name(), profile)
                     .join(&filename);
                 ensure_contained(installation, &source)?;
                 if !source.is_file() {
@@ -207,7 +172,7 @@ pub fn promote_for_targets(
         for target in &targets {
             for library in project.libraries(target.triple()) {
                 let source = target
-                    .build_output_root(installation, project.name())
+                    .build_output_root(installation, project.name(), profile)
                     .join(library);
                 ensure_contained(installation, &source)?;
                 if !source.is_file() {
@@ -226,6 +191,25 @@ pub fn promote_for_targets(
                     source.display(),
                     destination.display()
                 );
+            }
+        }
+    }
+    for target in &targets {
+        let bin_root = installation.join("bin").join(target.triple());
+        for legacy in [
+            "vapor-devtools",
+            "vapor-studio-service",
+            "vapor-monitor",
+            "vapor-profile",
+        ] {
+            let path = bin_root.join(target.binary_file_name(legacy));
+            if path.is_file() {
+                fs::remove_file(&path).map_err(|error| {
+                    format!(
+                        "failed to remove retired binary '{}': {error}",
+                        path.display()
+                    )
+                })?;
             }
         }
     }
@@ -249,7 +233,7 @@ impl RuntimeTarget {
         let mut seen = std::collections::BTreeSet::new();
         let mut targets = Vec::new();
         for target in target_triples {
-            validate_target_triple(Some(target))?;
+            vapor_client_provider::validate_runtime_target(target)?;
             if !seen.insert(target.clone()) {
                 return Err(format!("duplicate runtime target: {target}"));
             }
@@ -265,12 +249,12 @@ impl RuntimeTarget {
         &self.triple
     }
 
-    fn build_output_root(&self, installation: &Path, project_name: &str) -> PathBuf {
-        let root = installation.join("output/dev").join(project_name);
+    fn build_output_root(&self, installation: &Path, project_name: &str, profile: &str) -> PathBuf {
+        let root = installation.join("output").join(profile).join(project_name);
         if self.explicit {
-            root.join(self.triple()).join("debug")
+            root.join(self.triple()).join(profile)
         } else {
-            root.join("debug")
+            root.join(profile)
         }
     }
 
@@ -284,23 +268,6 @@ impl RuntimeTarget {
         } else {
             binary.to_owned()
         }
-    }
-}
-
-pub(crate) fn host_runtime_target() -> String {
-    let arch = std::env::consts::ARCH;
-    match (arch, std::env::consts::OS, std::env::consts::FAMILY) {
-        ("x86_64", "linux", _) => "x86_64-unknown-linux-gnu".to_owned(),
-        ("aarch64", "linux", _) => "aarch64-unknown-linux-gnu".to_owned(),
-        ("x86_64", "windows", _) => "x86_64-pc-windows-gnullvm".to_owned(),
-        ("aarch64", "windows", _) => "aarch64-pc-windows-msvc".to_owned(),
-        ("x86_64", "macos", _) => "x86_64-apple-darwin".to_owned(),
-        ("aarch64", "macos", _) => "aarch64-apple-darwin".to_owned(),
-        _ => format!(
-            "{arch}-{}-{}",
-            std::env::consts::OS,
-            std::env::consts::FAMILY
-        ),
     }
 }
 
@@ -342,183 +309,6 @@ fn promote_file(source: &Path, destination: &Path) -> Result<(), String> {
     })
 }
 
-fn selected_projects(
-    manifest: &WorkspaceManifest,
-    selection: ProjectSelection,
-) -> Result<Vec<&CargoProject>, String> {
-    match selection {
-        ProjectSelection::All => {
-            if manifest.cargo_projects().is_empty() {
-                Err(format!(
-                    "source root '{}' declares no Cargo workspaces",
-                    manifest.id()
-                ))
-            } else {
-                Ok(manifest.cargo_projects().iter().collect())
-            }
-        }
-        ProjectSelection::Installable => {
-            let projects = manifest
-                .cargo_projects()
-                .iter()
-                .filter(|project| !project.binaries().is_empty())
-                .collect::<Vec<_>>();
-            if projects.is_empty() {
-                Err(format!(
-                    "source root '{}' declares no installable Cargo workspaces",
-                    manifest.id()
-                ))
-            } else {
-                Ok(projects)
-            }
-        }
-        ProjectSelection::One(name) => manifest
-            .cargo_projects()
-            .iter()
-            .find(|project| project.name() == name.as_str())
-            .map(|project| vec![project])
-            .ok_or_else(|| format!("source root does not declare Cargo workspace '{name}'")),
-    }
-}
-
-#[derive(Clone, Copy)]
-enum ValidationStep {
-    Workflow(CargoWorkflow),
-    FmtCheck,
-    Check,
-    Test,
-    Clippy,
-    Doc,
-}
-
-impl ValidationStep {
-    fn label(self, target_triple: Option<&str>) -> &'static str {
-        match self {
-            Self::Workflow(workflow) => workflow.label(),
-            Self::FmtCheck => "fmt --check",
-            Self::Check => "check",
-            Self::Test if runs_tests(target_triple) => "test",
-            Self::Test => "test --no-run",
-            Self::Clippy => "clippy",
-            Self::Doc => "doc",
-        }
-    }
-
-    fn args(self, target_triple: Option<&str>) -> (Vec<&'static str>, &'static [&'static str]) {
-        match self {
-            Self::Workflow(CargoWorkflow::Fmt) => (vec!["fmt", "--all"], &[]),
-            Self::Workflow(CargoWorkflow::Check) | Self::Check => (
-                vec!["check", "--workspace", "--all-targets", "--locked"],
-                &[],
-            ),
-            Self::Workflow(CargoWorkflow::Test) | Self::Test => {
-                let mut args = vec!["test", "--workspace", "--all-targets", "--locked"];
-                if !runs_tests(target_triple) {
-                    args.push("--no-run");
-                }
-                (args, &[])
-            }
-            Self::Workflow(CargoWorkflow::Build) => (vec!["build", "--workspace", "--locked"], &[]),
-            Self::Workflow(CargoWorkflow::Validate) => unreachable!("validate expands into steps"),
-            Self::FmtCheck => (vec!["fmt", "--all"], &["--check"]),
-            Self::Clippy => (
-                vec!["clippy", "--workspace", "--all-targets", "--locked"],
-                &["-D", "warnings"],
-            ),
-            Self::Doc => (vec!["doc", "--workspace", "--no-deps", "--locked"], &[]),
-        }
-    }
-}
-
-fn runs_tests(target_triple: Option<&str>) -> bool {
-    target_triple.is_none_or(|target| target == host_runtime_target())
-}
-
-fn run_step(
-    paths: &EnvironmentPaths,
-    project: &CargoProject,
-    step: ValidationStep,
-    target_triple: Option<&str>,
-) -> Result<(), String> {
-    let cargo = paths
-        .installation()
-        .bundled_cargo()
-        .ok_or_else(|| "Steam installation has no bundled Cargo executable".to_owned())?;
-    let manifest = paths.source().root().join(project.manifest());
-    let working_directory = manifest
-        .parent()
-        .ok_or_else(|| format!("Cargo manifest has no parent: {}", manifest.display()))?;
-    let installation = paths.installation().root();
-    let target = installation.join("output/dev").join(project.name());
-
-    println!("==> {}: {}", project.name(), step.label(target_triple));
-    let mut command = Command::new(&cargo);
-    let (cargo_args, tool_args) = step.args(target_triple);
-    command
-        .args(cargo_args)
-        .args(["--manifest-path"])
-        .arg(&manifest)
-        .current_dir(working_directory)
-        .env("VAPOR_HOME", installation)
-        .env("CARGO_HOME", installation.join("cargo-home"))
-        .env("RUSTUP_HOME", installation.join("rustup-home"))
-        .env("CARGO_TARGET_DIR", target)
-        .env("PATH", managed_path(paths)?)
-        .env_remove("RUSTC_WRAPPER");
-    if step.accepts_target()
-        && let Some(target) = target_triple
-    {
-        cross_toolchain::configure_linker_env(&mut command, installation, target)?;
-        command.args(["--target", target]);
-    }
-    if !tool_args.is_empty() {
-        command.arg("--").args(tool_args);
-    }
-    if matches!(step, ValidationStep::Doc) {
-        command.env("RUSTDOCFLAGS", "-D warnings");
-    }
-
-    let status = command.status().map_err(|error| {
-        format!(
-            "failed to run {} for '{}': {error}",
-            step.label(target_triple),
-            project.name()
-        )
-    })?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "{} failed for project '{}' with {status}",
-            step.label(target_triple),
-            project.name()
-        ))
-    }
-}
-
-impl ValidationStep {
-    fn accepts_target(self) -> bool {
-        !matches!(self, Self::Workflow(CargoWorkflow::Fmt) | Self::FmtCheck)
-    }
-}
-
-fn validate_target_triple(target: Option<&str>) -> Result<(), String> {
-    let Some(target) = target else {
-        return Ok(());
-    };
-    let valid = !target.is_empty()
-        && target
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'));
-    if valid {
-        Ok(())
-    } else {
-        Err(format!(
-            "target triple must be a Rust target triple such as x86_64-pc-windows-gnullvm: {target}"
-        ))
-    }
-}
-
 pub(crate) fn managed_path(paths: &EnvironmentPaths) -> Result<OsString, String> {
     let installation = paths.installation();
     let root = installation.root();
@@ -555,4 +345,28 @@ fn is_raw_app_tool_path(root: &Path, entry: &Path) -> bool {
 
     let toolchains = root.join("rustup-home/toolchains");
     entry.starts_with(&toolchains) && entry.file_name().is_some_and(|name| name == "bin")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RuntimeTarget;
+    use std::path::Path;
+
+    #[test]
+    fn deployment_profiles_resolve_to_distinct_artifact_roots() {
+        let target = RuntimeTarget {
+            triple: "x86_64-unknown-linux-gnu".to_owned(),
+            explicit: true,
+        };
+        let installation = Path::new("/vapor");
+
+        assert_eq!(
+            target.build_output_root(installation, "vapor", "dev"),
+            Path::new("/vapor/output/dev/vapor/x86_64-unknown-linux-gnu/dev")
+        );
+        assert_eq!(
+            target.build_output_root(installation, "vapor", "release"),
+            Path::new("/vapor/output/release/vapor/x86_64-unknown-linux-gnu/release")
+        );
+    }
 }

@@ -62,12 +62,26 @@ current_dir()/remembered path ──> external source [root] or [workspace]
                          enter interactive loop
 ```
 
-## State ownership
+## Service and frontend ownership
 
-`ShellState` owns one immutable pair of discovered roots and mutable source-only
-navigation state. The current directory can never become an installation path.
-Installation commands print or execute explicit resources without changing the
-source cursor.
+The Vapor Client service is the shared application host for Studio and CLI.
+Compositions, the Library, content discovery and lifecycle, Workshop operations,
+root publishing, authoring mutations, and managed workspace tools are requested
+through typed Client protocol actions. The service owns their persistent state,
+provider calls, and operation lifecycle; the frontends render snapshots and
+submit intent.
+
+The frontends are not yet pure facades. CLI still owns some source discovery and
+Cargo metadata projection, runtime-target selection, root local deployment and
+package staging, plus OS-level executable handoff and initial Client deployment.
+Workspace tool subprocess output is not yet an operation event stream; at
+present it is written by the service process. These are known boundary gaps,
+not evidence that CLI and Studio have separate content authorities.
+
+`ShellState` owns the CLI's discovered installation/source roots and its
+source-only navigation cursor. The current directory can never become an
+installation path. Installation commands print or execute explicit resources
+without changing the source cursor.
 
 Cargo integration has three materially different states:
 
@@ -87,19 +101,20 @@ do not proceed until required source structure and tools validate.
 action commands. It resolves source-root policy, optional `[root.steam]` policy,
 app-root registration state, tool health, and Cargo-derived state once.
 
-Before an action mutates state or launches a child process, its handler supplies
-a targeted `ValidationPlan`. A Cargo build requires script-prepared Rust, Git,
-and valid source-root policy. A real root publish additionally requires
-SteamCMD; `root publish --dry-run` does not. Commands never install or repair
-failed prerequisites implicitly.
+Service-owned actions validate against the same workspace and toolchain they
+will use, then return a typed operation result. Remaining CLI-owned actions use
+`metadata::ResolvedMetadata` and targeted `ValidationPlan`s. For example, root
+local deploy and package staging still require CLI orchestration, while a real
+root publish additionally requires SteamCMD; `root publish --dry-run` does not.
+Commands never install or repair failed prerequisites implicitly.
 
 ## Command surface
 
-The interactive shell is the primary command environment. Source-bound commands
-derive authority from the shell's active source, current source cursor,
-discovered app root, and script-prepared tool status. Host-level direct
-facades are narrow: app inspection, source selection, metadata reporting,
-read-only content inspection, launch, diagnostics, and script entry.
+The interactive shell is a CLI frontend to the shared Client service. Source-
+bound actions derive workspace identity from the active source and discovered
+app root, then submit typed service requests. The CLI still provides host-level
+bootstrap, metadata reporting, local root deployment/package orchestration,
+diagnostics, and process handoff.
 
 Scripts may run local content lifecycle operations and dry-run publication
 staging or IDE repair, but they may not authenticate Steam, perform real
@@ -109,17 +124,19 @@ changes.
 ## Module map
 
 - `app`: startup and REPL control flow.
-- `command`: Clap grammar and command effects.
-- `content`: Workshop/content discovery, package/cache/install state,
-  fingerprints, receipts, repair, and provider publication previews.
-- `cargo_metadata`: invocation and typed projection of Cargo's JSON output.
+- `command`: Clap grammar and CLI action adapters; content and publishing state changes are
+  dispatched through typed Client actions.
+- `cargo_metadata`: optional rebuildable invocation and projection of Cargo's
+  JSON output for CLI workspace reporting.
 - `discovery`: installation/source discovery and disjoint-root validation.
 - `ide`: explicit project-local RustRover/JetBrains status and repair.
 - `manifest`: strict Vapor identity vocabulary.
 - `metadata`: shared environment resolution, reporting, and targeted preflight.
-- `source_registry`: app-local index and active selection for external sources.
+- source registration and active authoring context are owned by Vapor Core and
+  mutated through typed Vapor Client service actions.
 - `workspace`: source-root Cargo workspace discovery.
-- `workflow`: app-local Rust/Cargo formatting, checking, testing, and validation.
+- `workflow`: thin CLI adapters to the service-owned app-local Rust/Cargo
+  workflows, plus the remaining direct host bootstrap helpers.
 - `app_local_tools`: internal app-local tool readiness model used by metadata and command preflight.
 - `state`: active source selection and current content context.
 - `prompt`: Reedline presentation adapter.

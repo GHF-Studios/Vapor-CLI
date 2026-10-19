@@ -70,7 +70,9 @@ app root.
 `x86_64-pc-windows-gnullvm`. When `[workspace.runtime].targets` is declared in
 `Workspace.vapor.toml`, omitting target flags uses that full matrix by
 default. `--release-targets` is accepted as an explicit spelling of the same
-manifest-matrix behavior.
+manifest-matrix behavior. `content deploy` builds only the selected artifact
+and the source dependencies it needs; use `content build` when you explicitly
+want to build the complete workspace.
 `content package`, `content create`, and `content publish` may repeat
 `--target` to stage a custom subset into one package root. Use `--host-only`
 for quick local smoke passes that should read the normal app-local Cargo output

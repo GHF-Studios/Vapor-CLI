@@ -11,7 +11,6 @@ use crate::{
     launch_session,
     metadata::MetadataFormat,
     prompt::VaporPrompt,
-    source_registry,
     state::ShellState,
 };
 use clap::{Parser, Subcommand, error::ErrorKind};
@@ -435,7 +434,7 @@ impl StartupMode {
 }
 
 fn open_saved_source(state: &mut ShellState) -> Result<(), String> {
-    if let Some(source) = source_registry::active_source(state.installation())? {
+    if let Some(source) = command::active_source_root(state)? {
         match EnvironmentPaths::from_installation_and_source_path(
             state.installation().clone(),
             &source,

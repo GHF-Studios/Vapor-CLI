@@ -9,14 +9,12 @@ mod git_provider;
 mod ide;
 mod launch_session;
 mod prompt;
-mod source;
 
 pub mod app_local_tools;
 pub mod cargo_metadata;
 pub mod command;
 pub mod documentation;
 pub mod metadata;
-pub mod source_registry;
 pub mod state;
 pub mod workflow;
 

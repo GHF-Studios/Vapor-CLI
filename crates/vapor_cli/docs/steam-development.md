@@ -214,11 +214,13 @@ The concrete Windows build and Linux handoff checklist is documented in
 ## Authentication
 
 Vapor does not expose a standalone SteamCMD login workflow. Real publication is
-the authentication boundary: `root publish --account NAME --yes` starts the
-installation-owned SteamCMD with inherited stdin/stdout, lets Steam own any
-password or mobile-authenticator prompts, and returns to the REPL after SteamCMD
-exits. Vapor never accepts a password argument and never copies SteamCMD's
-`config/` into staging.
+the authentication boundary: `root publish --account NAME --yes` asks the shared
+Vapor Client service to run installation-owned SteamCMD after it revalidates the
+reviewed payload. The service owns the upload lifecycle and reports its terminal
+result to the CLI. Vapor never accepts a password argument and never copies
+SteamCMD's `config/` into staging. SteamCMD prompts require an existing usable
+SteamCMD login session; interactive credential handoff from frontends is not yet
+implemented.
 
 Steam authentication is session-scoped by policy. Commands that publish for real
 must be typed manually in the interactive shell; scripts may dry-run but may not
@@ -239,8 +241,8 @@ A real upload requires both a non-default branch and explicit confirmation:
 root publish --account NAME --branch vapor-dev --yes
 ```
 
-SteamCMD runs in the foreground so progress, prompts, exit status, and failure
-remain attached to the operation. `output/root/steam-build` is not cleared by
+The Client service runs SteamCMD as the operation worker and returns the exit
+status or failure to the caller. `output/root/steam-build` is not cleared by
 staging; it contains SteamPipe manifests and chunk cache that improve subsequent
 uploads.
 

@@ -25,7 +25,6 @@ crates/vapor_cli/
 │   │   │   └── render.rs
 │   │   └── validation.rs
 │   ├── prompt.rs
-│   ├── source_registry.rs
 │   ├── steam.rs
 │   ├── terminal.rs
 │   ├── app_local_tools.rs

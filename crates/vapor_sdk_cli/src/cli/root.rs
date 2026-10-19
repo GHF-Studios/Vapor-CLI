@@ -99,6 +99,7 @@ impl RootPublishArgs {
             account: self.account,
             steamcmd: self.steamcmd,
             set_live: self.set_live,
+            expected_fingerprint: None,
         }
     }
 }
