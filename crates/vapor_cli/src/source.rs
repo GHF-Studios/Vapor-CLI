@@ -76,22 +76,6 @@ pub(crate) struct SourceRepairReport {
     actions: Vec<SourceRepairAction>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum GeneratedOutputKind {
-    Binary,
-    RuntimeLibrary,
-    StaticCrate,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum GeneratedContentProject {
-    Rust {
-        crate_name: String,
-        output: GeneratedOutputKind,
-    },
-    MetadataOnly,
-}
-
 impl SourceRepairReport {
     pub(crate) fn actions(&self) -> &[SourceRepairAction] {
         &self.actions
@@ -554,62 +538,6 @@ crate-type = ["{crate_type}"]
         }
     }
     write(path, &source)
-}
-
-/// Add the Rust source project for code-bearing content roles. Composition-only
-/// roles intentionally contain no Cargo package or empty Rust placeholder.
-pub(crate) fn scaffold_content_project(
-    root: &Path,
-    content_id: &str,
-    version: &str,
-    kind: ContentKind,
-) -> Result<GeneratedContentProject, String> {
-    let output = content_project_output(kind);
-    let Some(output) = output else {
-        return Ok(GeneratedContentProject::MetadataOnly);
-    };
-    let crate_name = format!("vapor_{}", content_id.replace(['/', '-'], "_"));
-    let mut cargo = format!(
-        "[package]\nname = \"{crate_name}\"\nversion = \"{version}\"\nedition = \"2024\"\n"
-    );
-    if matches!(
-        output,
-        GeneratedOutputKind::RuntimeLibrary | GeneratedOutputKind::StaticCrate
-    ) {
-        let crate_types = match output {
-            GeneratedOutputKind::RuntimeLibrary => "\"rlib\", \"cdylib\"",
-            GeneratedOutputKind::StaticCrate => "\"rlib\", \"staticlib\"",
-            GeneratedOutputKind::Binary => unreachable!("binary output has no library crate types"),
-        };
-        cargo.push_str(&format!("\n[lib]\ncrate-type = [{crate_types}]\n"));
-    }
-    write(&root.join("Cargo.toml"), &cargo)?;
-    match output {
-        GeneratedOutputKind::Binary => write(
-            &root.join("src/main.rs"),
-            &format!("fn main() {{ println!(\"Vapor Engine {content_id}\"); }}\n"),
-        )?,
-        GeneratedOutputKind::RuntimeLibrary | GeneratedOutputKind::StaticCrate => write(
-            &root.join("src/lib.rs"),
-            &format!("#![forbid(unsafe_code)]\n\npub const CONTENT_ID: &str = \"{content_id}\";\n"),
-        )?,
-    }
-    Ok(GeneratedContentProject::Rust { crate_name, output })
-}
-
-pub(crate) fn content_project_output(kind: ContentKind) -> Option<GeneratedOutputKind> {
-    match kind {
-        ContentKind::Engine => Some(GeneratedOutputKind::Binary),
-        ContentKind::Game
-        | ContentKind::EngineMod
-        | ContentKind::GameMod
-        | ContentKind::ExtensionMod => Some(GeneratedOutputKind::RuntimeLibrary),
-        ContentKind::Crate => Some(GeneratedOutputKind::StaticCrate),
-        ContentKind::Packagepack
-        | ContentKind::Enginepack
-        | ContentKind::Gamepack
-        | ContentKind::Modpack => None,
-    }
 }
 
 fn validate_slug(label: &str, value: &str) -> Result<(), String> {
