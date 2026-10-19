@@ -476,6 +476,11 @@ fn send_client_action_inner(
                         finish_cli_progress(last_rendered_progress.is_some());
                         return Err("the launch operation was cancelled".to_owned());
                     }
+                    OperationStatus::Cancelling => {
+                        finish_cli_progress(last_rendered_progress.is_some());
+                        last_rendered_progress = None;
+                        eprintln!("{}: stopping…", event.action);
+                    }
                     OperationStatus::Running => {
                         if let Some(progress) = event.progress {
                             let percent = (progress.clamp(0.0, 1.0) * 100.0).round() as u8;
