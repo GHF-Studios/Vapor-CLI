@@ -76,9 +76,12 @@ Cargo metadata projection, runtime-target selection, root local deployment and
 package staging, plus OS-level executable handoff and initial Client deployment.
 Workspace-tool stdout and stderr now travel as operation-scoped Client events:
 CLI renders them to their original terminal streams, while Studio keeps a
-bounded output view. The service captures and bounds each output line before
-forwarding it. The remaining host/bootstrap boundaries are genuine local work,
-not evidence that CLI and Studio have separate content authorities.
+bounded output view. Source release staging uses the same event stream for each
+Cargo step and its child-process output. The service bounds each line and caps
+queued output while a frontend is not polling, preserving lifecycle events and
+marking omitted older output. The remaining host/bootstrap boundaries are
+genuine local work, not evidence that CLI and Studio have separate content
+authorities.
 
 `ShellState` owns the CLI's discovered installation/source roots and its
 source-only navigation cursor. The current directory can never become an

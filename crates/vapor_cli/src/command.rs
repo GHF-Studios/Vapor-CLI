@@ -14,7 +14,7 @@ use crate::{
     documentation, git_provider, ide,
     metadata::{ResolvedMetadata, ValidationPlan},
     state::ShellState,
-    workflow::{CargoWorkflow, ProjectSelection},
+    workflow::{CargoWorkflow, ProjectSelection, host_runtime_target},
     workspace::{SourceRootKind, WorkspaceManifest},
 };
 mod client_commands;
@@ -492,7 +492,7 @@ fn resolve_runtime_targets(
         return Ok(explicit_targets.to_vec());
     }
     if host_only {
-        return Ok(Vec::new());
+        return Ok(vec![host_runtime_target()]);
     }
     if release_targets && manifest.runtime_targets().is_empty() {
         return Err(
