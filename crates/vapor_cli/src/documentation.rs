@@ -1,12 +1,7 @@
 //! Build, locate, and open installed Vapor documentation.
 
-use crate::{discovery::EnvironmentPaths, workspace::WorkspaceManifest};
+use crate::discovery::EnvironmentPaths;
 use std::{path::PathBuf, process::Command};
-
-/// Build Rustdoc for every workspace declared by the distribution manifest.
-pub fn build(paths: &EnvironmentPaths, manifest: &WorkspaceManifest) -> Result<PathBuf, String> {
-    vapor_client_provider::documentation::build(paths, manifest)
-}
 
 /// Resolve an installed documentation section or the aggregate index.
 pub fn path(paths: &EnvironmentPaths, topic: Option<&str>) -> Result<PathBuf, String> {

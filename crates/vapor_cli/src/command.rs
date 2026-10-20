@@ -576,12 +576,14 @@ fn execute_docs(command: DocsCommand, state: &ShellState) -> Result<(), String> 
                     .app_local_tools(&[AppToolRequirement::Rust])
                     .workspace(),
             )?;
-            println!(
-                "{}",
-                documentation::build(state.active_paths()?, metadata.workspace_manifest()?)?
-                    .display()
-            );
-            println!("hint: open it with `docs open`");
+            let mut client = connect_client_service(state)?;
+            content_commands::open_workspace_in_service(&mut client, state)?;
+            let event = send_client_action(
+                &mut client,
+                ClientAction::Workspace(WorkspaceAction::BuildDocumentation),
+            )?;
+            client_commands::print_service_operation_message(event);
+            println!("hint: open the installed documentation with `docs open`");
         }
         DocsCommand::Path { topic } => println!(
             "{}",
