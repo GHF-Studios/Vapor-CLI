@@ -13,11 +13,12 @@ use crate::{
     app_local_tools::AppToolRequirement,
     metadata::{ResolvedMetadata, ValidationPlan},
 };
-use vapor_client::Client;
+use std::time::{Duration, Instant};
+use vapor_client::{Client, ClientError};
 use vapor_client_protocol::{
     AuthoringAction, AuthoringResultKind, CatalogAction, CatalogEntry, CatalogItemRole,
-    CatalogLocationKind, ClientAction, LibraryAction, WorkshopAction, WorkspaceAction,
-    WorkspaceProjectSelection,
+    CatalogLocationKind, ClientAction, ClientEvent, ClientSnapshot, LibraryAction, ProtocolFrame,
+    WorkshopAction, WorkspaceAction, WorkspaceProjectSelection,
 };
 
 pub(super) fn execute_content(command: ContentCommand, state: &ShellState) -> Result<(), String> {
@@ -677,18 +678,33 @@ fn stage_workshop_item_on_client(
             selector: selector.to_owned(),
             target_triples: targets.to_vec(),
         }),
-    )?;
-    print_service_operation_message(stage_event);
-    client
-        .latest_snapshot()
-        .workshop
-        .review
-        .as_ref()
-        .filter(|review| review.selector == selector)
-        .cloned()
-        .ok_or_else(|| {
-            "Vapor Client completed staging without returning its review; stage the item again in Studio".to_owned()
-        })
+    )?
+    .ok_or_else(|| "Vapor Client accepted staging without returning its operation.".to_owned())?;
+    let operation_id = stage_event.id.clone();
+    print_service_operation_message(Some(stage_event));
+    wait_for_workshop_review(client, &operation_id, selector)
+}
+
+fn wait_for_workshop_review(
+    client: &mut Client,
+    operation_id: &str,
+    selector: &str,
+) -> Result<vapor_client_protocol::WorkshopReviewSnapshot, String> {
+    wait_for_workshop_snapshot(client, "staging", |snapshot| {
+        snapshot
+            .workshop
+            .review
+            .as_ref()
+            .filter(|review| {
+                staged_workshop_review_matches(
+                    &review.review_id,
+                    &review.selector,
+                    operation_id,
+                    selector,
+                )
+            })
+            .cloned()
+    })
 }
 
 fn stage_workshop_batch_through_service(
@@ -712,18 +728,75 @@ fn stage_workshop_batch_on_client(
             selectors: selectors.to_vec(),
             target_triples: targets.to_vec(),
         }),
-    )?;
-    print_service_operation_message(event);
-    client
-        .latest_snapshot()
-        .workshop
-        .batch_review
-        .as_ref()
-        .filter(|review| review.items.len() == selectors.len())
-        .cloned()
-        .ok_or_else(|| {
-            "Vapor Client completed batch staging without returning its review; stage the batch again in Studio".to_owned()
-        })
+    )?
+    .ok_or_else(|| {
+        "Vapor Client accepted batch staging without returning its operation.".to_owned()
+    })?;
+    let operation_id = event.id.clone();
+    print_service_operation_message(Some(event));
+    wait_for_workshop_batch_review(client, &operation_id, selectors)
+}
+
+fn wait_for_workshop_batch_review(
+    client: &mut Client,
+    operation_id: &str,
+    selectors: &[String],
+) -> Result<vapor_client_protocol::WorkshopBatchReviewSnapshot, String> {
+    wait_for_workshop_snapshot(client, "batch staging", |snapshot| {
+        snapshot
+            .workshop
+            .batch_review
+            .as_ref()
+            .filter(|review| {
+                review.review_id == operation_id
+                    && review
+                        .items
+                        .iter()
+                        .map(|item| item.selector.as_str())
+                        .eq(selectors.iter().map(String::as_str))
+            })
+            .cloned()
+    })
+}
+
+fn wait_for_workshop_snapshot<T>(
+    client: &mut Client,
+    action: &str,
+    mut select_review: impl FnMut(&ClientSnapshot) -> Option<T>,
+) -> Result<T, String> {
+    const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(5);
+    const POLL_INTERVAL: Duration = Duration::from_millis(100);
+    let deadline = Instant::now() + SNAPSHOT_TIMEOUT;
+
+    loop {
+        if let Some(review) = select_review(client.latest_snapshot()) {
+            return Ok(review);
+        }
+
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(format!(
+                "Vapor Client completed {action} but did not publish the matching review snapshot within five seconds."
+            ));
+        }
+        match client.recv_timeout(remaining.min(POLL_INTERVAL)) {
+            Ok(ProtocolFrame::Event(ClientEvent::ProtocolError(error))) => {
+                return Err(error.message);
+            }
+            Ok(_) => {}
+            Err(ClientError::Timeout(_)) => {}
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+}
+
+fn staged_workshop_review_matches(
+    review_id: &str,
+    review_selector: &str,
+    operation_id: &str,
+    selector: &str,
+) -> bool {
+    review_id == operation_id && review_selector == selector
 }
 
 fn publish_workshop_batch_through_service(
@@ -928,7 +1001,7 @@ fn print_catalog_item(entry: &CatalogEntry, location_kind: CatalogLocationKind) 
 
 #[cfg(test)]
 mod workshop_intent_tests {
-    use super::validate_workshop_intent;
+    use super::{staged_workshop_review_matches, validate_workshop_intent};
 
     #[test]
     fn workshop_create_and_update_keep_their_distinct_targets() {
@@ -936,5 +1009,27 @@ mod workshop_intent_tests {
         assert!(validate_workshop_intent("moon", Some("123"), "publication").is_ok());
         assert!(validate_workshop_intent("moon", Some("123"), "creation").is_err());
         assert!(validate_workshop_intent("moon", None, "publication").is_err());
+    }
+
+    #[test]
+    fn staging_only_accepts_the_review_for_its_completed_operation() {
+        assert!(!staged_workshop_review_matches(
+            "old-operation",
+            "example@0.1.0",
+            "new-operation",
+            "example@0.1.0"
+        ));
+        assert!(staged_workshop_review_matches(
+            "old-operation",
+            "example@0.1.0",
+            "old-operation",
+            "example@0.1.0"
+        ));
+        assert!(!staged_workshop_review_matches(
+            "old-operation",
+            "example@0.1.0",
+            "old-operation",
+            "other@0.1.0"
+        ));
     }
 }
