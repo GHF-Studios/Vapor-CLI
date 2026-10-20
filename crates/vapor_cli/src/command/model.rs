@@ -277,6 +277,8 @@ pub enum GitProviderCommand {
 pub enum DocsCommand {
     /// Build all declared Rustdoc into the installation.
     Build,
+    /// Publish the curated public documentation site to Vapor Docs.
+    Publish,
     /// Print an installed documentation path.
     Path {
         /// Optional documentation section.

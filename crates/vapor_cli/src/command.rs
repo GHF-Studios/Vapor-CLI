@@ -143,6 +143,9 @@ fn operation_descriptor(
             command: DocsCommand::Build,
         } => ("docs", "build", Phase::Building),
         ShellCommand::Docs {
+            command: DocsCommand::Publish,
+        } => ("docs", "publish", Phase::Publishing),
+        ShellCommand::Docs {
             command: DocsCommand::Path { .. },
         } => ("docs", "path", Phase::Resolving),
         ShellCommand::Docs {
@@ -584,6 +587,17 @@ fn execute_docs(command: DocsCommand, state: &ShellState) -> Result<(), String> 
             )?;
             client_commands::print_service_operation_message(event);
             println!("hint: open the installed documentation with `docs open`");
+        }
+        DocsCommand::Publish => {
+            let metadata = ResolvedMetadata::resolve(state);
+            metadata.validate(&ValidationPlan::new("publish documentation").workspace())?;
+            let mut client = connect_client_service(state)?;
+            content_commands::open_workspace_in_service(&mut client, state)?;
+            let event = send_client_action(
+                &mut client,
+                ClientAction::Workspace(WorkspaceAction::PublishDocumentation),
+            )?;
+            client_commands::print_service_operation_message(event);
         }
         DocsCommand::Path { topic } => println!(
             "{}",

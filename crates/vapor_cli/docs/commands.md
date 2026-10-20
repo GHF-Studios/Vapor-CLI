@@ -283,10 +283,14 @@ created or published.
 
 ## Documentation
 
-### `docs build|path|open [TOPIC]`
+### `docs build|publish|path|open [TOPIC]`
 
 Build Rustdoc for discovered Cargo workspaces into the installed `docs/` tree,
-print a generated document path, or open it asynchronously.
+publish the curated Vapor documentation site to the configured Vapor Docs
+server, print a generated document path, or open it asynchronously. Publishing
+uses `VAPOR_DOCS_ADMIN_TOKEN` from the Client service environment and the
+`VAPOR_DOCS_BASE_URL` setting (default `https://vapor.ghf-studios.site/docs`).
+It is an explicit operation and is not part of local deployment.
 
 ## IDE setup
 
