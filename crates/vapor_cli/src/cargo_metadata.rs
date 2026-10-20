@@ -15,12 +15,10 @@
 //! installation with `--format-version 1 --no-deps`. Failure degrades to
 //! [`CargoIndex::Unavailable`] instead of preventing access to authored source.
 
-use crate::{discovery::EnvironmentPaths, workflow};
+use crate::discovery::EnvironmentPaths;
 use serde::Deserialize;
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::path::{Path, PathBuf};
+use vapor_client_provider::managed_cargo::ApplicationCargo;
 
 /// Result of attempting to index the source workspace with Cargo.
 #[derive(Debug, Clone)]
@@ -42,14 +40,12 @@ impl CargoIndex {
             return Self::NotPresent;
         }
 
-        let Some(cargo) = paths.installation().bundled_cargo() else {
-            return Self::Unavailable(format!(
-                "Steam installation '{}' has no bundled Cargo executable",
-                paths.installation().root().display()
-            ));
+        let cargo = match ApplicationCargo::discover(paths) {
+            Ok(cargo) => cargo,
+            Err(error) => return Self::Unavailable(error),
         };
 
-        match load(&cargo, &manifest, source_root, paths) {
+        match load(&cargo, &manifest, source_root) {
             Ok(metadata) => Self::Loaded(metadata),
             Err(error) => Self::Unavailable(error),
         }
@@ -126,12 +122,12 @@ impl CargoTarget {
 }
 
 fn load(
-    cargo: &Path,
+    cargo: &ApplicationCargo,
     manifest: &Path,
     source_root: &Path,
-    paths: &EnvironmentPaths,
 ) -> Result<CargoWorkspace, String> {
-    let output = Command::new(cargo)
+    let output = cargo
+        .command()
         .args([
             "metadata",
             "--format-version",
@@ -140,17 +136,14 @@ fn load(
             "--manifest-path",
         ])
         .arg(manifest)
-        .env("VAPOR_HOME", paths.installation().root())
-        .env("CARGO_HOME", paths.installation().root().join("cargo-home"))
-        .env(
-            "RUSTUP_HOME",
-            paths.installation().root().join("rustup-home"),
-        )
-        .env("PATH", workflow::managed_path(paths)?)
-        .env_remove("RUSTC_WRAPPER")
         .current_dir(source_root)
         .output()
-        .map_err(|error| format!("failed to run bundled Cargo '{}': {error}", cargo.display()))?;
+        .map_err(|error| {
+            format!(
+                "failed to run bundled Cargo '{}': {error}",
+                cargo.cargo_path().display()
+            )
+        })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();

@@ -102,6 +102,7 @@ fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control
         ShellCommand::Build { project } => {
             execute_workflow(CargoWorkflow::Build, project, state)?;
         }
+        ShellCommand::Clean => execute_clean_workspace(state)?,
         ShellCommand::Validate { project } => {
             execute_workflow(CargoWorkflow::Validate, project, state)?;
         }
@@ -120,6 +121,20 @@ fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control
     }
 
     Ok(Control::Continue)
+}
+
+fn execute_clean_workspace(state: &ShellState) -> Result<(), String> {
+    let root = state.active_paths()?.source().root().to_path_buf();
+    let mut client = client_commands::connect_client_service(state)?;
+    content_commands::open_workspace_in_service(&mut client, state)?;
+    let event = client_commands::send_client_action(
+        &mut client,
+        ClientAction::Workspace(WorkspaceAction::Clean {
+            confirmed_workspace_root: root.display().to_string(),
+        }),
+    )?;
+    client_commands::print_service_operation_message(event);
+    Ok(())
 }
 
 fn execute_ide(command: IdeCommand, state: &ShellState) -> Result<(), String> {
@@ -701,6 +716,12 @@ mod client_launch_tests {
                 }
             }
         ));
+    }
+
+    #[test]
+    fn clean_is_a_first_class_workspace_service_operation() {
+        let parsed = ShellCommand::try_parse_from(["vapor", "clean"]).unwrap();
+        assert!(matches!(parsed, ShellCommand::Clean));
     }
 
     #[test]

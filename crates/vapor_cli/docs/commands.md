@@ -190,6 +190,13 @@ trees. Development tooling should be installed through the app-root
 Workspaces that declare `[workspace].binaries` in `Workspace.vapor.toml` can promote
 those outputs into `bin/<target>/` through `root build`.
 
+### `clean`
+
+Ask the shared Vapor Client service to remove the active workspace's managed
+development build outputs. This clears its app-local `output/dev/<project>`
+and user-data development target roots while preserving release outputs,
+documentation, installed content, and source files.
+
 ### `validate [--project PROJECT]`
 
 For each selected Cargo workspace, run formatting verification, `cargo check`,

@@ -85,6 +85,9 @@ pub enum ShellCommand {
         project: ProjectSelection,
     },
 
+    /// Clear the active workspace's Vapor-managed development build caches.
+    Clean,
+
     /// Run formatting, checking, tests, Clippy, and Rustdoc.
     Validate {
         /// Cargo workspace name to validate, or `all`.

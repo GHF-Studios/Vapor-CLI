@@ -1,11 +1,5 @@
 //! Cargo workflows routed through the Steam-installed Vapor setup.
 
-use std::{
-    env,
-    ffi::OsString,
-    path::{Path, PathBuf},
-};
-use vapor_client_provider::discovery::EnvironmentPaths;
 pub(crate) use vapor_client_provider::host_runtime_target;
 
 /// Dynamic Cargo workspace selection.
@@ -71,42 +65,4 @@ impl CargoWorkflow {
             Self::Validate => "validate",
         }
     }
-}
-
-pub(crate) fn managed_path(paths: &EnvironmentPaths) -> Result<OsString, String> {
-    let installation = paths.installation();
-    let root = installation.root();
-    let mut entries = Vec::<PathBuf>::new();
-    // Cargo is an app-local rustup proxy; put the matching app-local compiler
-    // first as well, or it can pick up a host rustc from the inherited PATH.
-    entries.push(
-        crate::app_local_tools::inspect(installation)
-            .rust()
-            .path()
-            .to_path_buf(),
-    );
-    entries.push(installation.binaries().to_path_buf());
-    entries.push(root.join("bin"));
-    if let Some(existing) = env::var_os("PATH") {
-        entries
-            .extend(env::split_paths(&existing).filter(|entry| !is_raw_app_tool_path(root, entry)));
-    }
-    env::join_paths(entries).map_err(|error| format!("failed to construct Vapor PATH: {error}"))
-}
-
-fn is_raw_app_tool_path(root: &Path, entry: &Path) -> bool {
-    let raw_exact = [
-        root.join("cargo-home/bin"),
-        root.join("rustup/bin"),
-        root.join("tools/steamcmd"),
-        root.join("tools/zig"),
-        root.join("tools/cross/bin"),
-        root.join("tools/llvm-mingw/bin"),
-    ];
-    if raw_exact.iter().any(|raw| entry == raw) {
-        return true;
-    }
-
-    let toolchains = root.join("rustup-home/toolchains");
-    entry.starts_with(&toolchains) && entry.file_name().is_some_and(|name| name == "bin")
 }
