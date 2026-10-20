@@ -1,10 +1,7 @@
 //! CLI facade operations over the shared Vapor Client service.
 
 use super::model::client_launch_arguments;
-use super::{
-    ClientCommand, ClientDeployCommand, ClientLaunchMode, LaunchCommand, ShellState,
-    run_cli_operation,
-};
+use super::{ClientCommand, ClientDeployCommand, ClientLaunchMode, LaunchCommand, ShellState};
 use crate::{diagnostics, workflow};
 use std::{
     io::Write,
@@ -16,16 +13,10 @@ use vapor_client_protocol::{
     AuthoringResultKind, ClientAction, ClientEvent, ClientResponseKind, CompositionAction,
     OperationStatus, ProtocolFrame, WorkshopAction, WorkspaceAction,
 };
-use vapor_core::{LocalClientDeploymentOutcome, OperationPhase, deploy_client_locally};
+use vapor_core::{LocalClientDeploymentOutcome, deploy_client_locally};
 
 pub(crate) fn execute_client(command: ClientCommand) -> Result<(), String> {
-    let (action, phase) = match &command {
-        ClientCommand::Launch { .. } => ("launch-entrypoint", OperationPhase::Running),
-        ClientCommand::Deploy { .. } => ("deploy-local", OperationPhase::Building),
-    };
-    run_cli_operation("client", action, phase, |_context| {
-        execute_client_body(command)
-    })
+    execute_client_body(command)
 }
 
 fn execute_client_body(command: ClientCommand) -> Result<(), String> {
@@ -435,6 +426,7 @@ fn send_client_action_inner(
     let mut authoring_result = None;
     let mut action_result_deadline: Option<Instant> = None;
     let mut last_rendered_progress = None;
+    let mut last_logged_state = None;
     loop {
         let now = Instant::now();
         let remaining = action_result_deadline.map_or_else(
@@ -458,6 +450,21 @@ fn send_client_action_inner(
             ProtocolFrame::Event(ClientEvent::OperationChanged(event))
                 if event.id == operation_id =>
             {
+                let state = (event.phase, event.status.clone());
+                if last_logged_state.as_ref() != Some(&state) {
+                    let status = match &event.status {
+                        OperationStatus::Running => "running",
+                        OperationStatus::Cancelling => "cancelling",
+                        OperationStatus::Succeeded => "succeeded",
+                        OperationStatus::Failed { .. } => "failed",
+                        OperationStatus::Cancelled => "cancelled",
+                    };
+                    diagnostics::event(format!(
+                        "service operation {} {} {:?} {status}",
+                        event.id, event.action, event.phase
+                    ));
+                    last_logged_state = Some(state);
+                }
                 match event.status.clone() {
                     OperationStatus::Succeeded if expects_authoring_result => {
                         finish_cli_progress(last_rendered_progress.is_some());
