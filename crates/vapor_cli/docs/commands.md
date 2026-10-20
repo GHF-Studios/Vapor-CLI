@@ -442,12 +442,13 @@ iteration on the current machine.
 
 ### `content package ARTIFACT [--target TARGET]... [--release-targets] [--host-only] [--dry-run]`
 
-Stage one deployable artifact root under `output/content/packages/` through the
-shared Client service, write a resolved deployed role manifest, fingerprint
-the staged root, and record a receipt. Declared `binaries` and `libraries` are
-copied from app-local Cargo output into `bin/<target>/` and `lib/<target>/`, and
-the deployed manifest records the staged filenames in target-specific
-`runtime` entries. When
+Build the complete source workspace through the managed toolchain, then stage
+one deployable artifact root under `output/content/packages/` through the
+shared Client service. Vapor writes a resolved deployed role manifest,
+fingerprints the staged root, and records a receipt. Declared `binaries` and
+`libraries` are copied from app-local Cargo output into `bin/<target>/` and
+`lib/<target>/`; the deployed manifest records their staged filenames in
+target-specific `runtime` entries. When
 `[workspace.runtime].targets` is declared, omitting target flags stages that
 full matrix into one package root. Repeat `--target` for an intentional custom
 subset, or use `--host-only` for a local host-only package.
@@ -459,8 +460,8 @@ to split operating systems. Runtime selection happens when Vapor installs or
 launches content by choosing the matching `bin/<target>/` and `lib/<target>/`
 payload.
 
-`--dry-run` computes the intended artifact path and deployed-artifact
-fingerprint without writing package files.
+`--dry-run` still builds the workspace and computes the intended artifact path
+and deployed-artifact fingerprint without writing package files.
 
 ### `content acquire ARTIFACT_OR_WORKSHOP_ID`
 

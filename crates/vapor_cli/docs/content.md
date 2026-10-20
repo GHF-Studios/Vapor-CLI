@@ -55,7 +55,8 @@ on a reported failure creation attempts to restore both original snapshots and
 remove the incomplete project. If the process stops between those two manifest
 updates, the authored folder remains discoverable by Find projects / Adopt.
 
-When `content package` stages an artifact, Vapor writes a resolved deployed
+When `content package` stages an artifact, Vapor first builds the complete
+workspace through the managed toolchain, then writes a resolved deployed
 role-specific manifest into the artifact root and copies declared runtime
 outputs into target-specific `bin/<target>/` and `lib/<target>/` directories so
 the installed or Workshop-downloaded artifact remains self-describing without
@@ -71,8 +72,9 @@ app root.
 `Workspace.vapor.toml`, omitting target flags uses that full matrix by
 default. `--release-targets` is accepted as an explicit spelling of the same
 manifest-matrix behavior. `content deploy` builds only the selected artifact
-and the source dependencies it needs; use `content build` when you explicitly
-want to build the complete workspace.
+and the source dependencies it needs. `content package` builds the complete
+workspace before staging the selected artifact; use `content build` when you
+want build outputs without staging a package.
 `content package`, `content create`, and `content publish` may repeat
 `--target` to stage a custom subset into one package root. Use `--host-only`
 for quick local smoke passes that should read the normal app-local Cargo output
