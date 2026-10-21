@@ -94,9 +94,10 @@ pub(super) fn execute_launch(
         return Err("`--profiling` is supported with `launch --current-workspace`; installed game launches are not Vapor Development Sessions.".to_owned());
     }
 
-    match command.unwrap_or(LaunchCommand::Default) {
-        LaunchCommand::Default => launch_default_composition(state),
-        LaunchCommand::Selected => launch_selected_composition(state),
+    match command.unwrap_or(LaunchCommand::Selected) {
+        // `default` remains accepted as a compatibility spelling, but it no
+        // longer bypasses the service-owned persistent selection.
+        LaunchCommand::Default | LaunchCommand::Selected => launch_selected_composition(state),
     }
 }
 
@@ -127,42 +128,6 @@ fn launch_client_entrypoint(
         return Err(format!("Vapor entrypoint exited with {status}"));
     }
     Ok(())
-}
-
-fn launch_default_composition(state: &ShellState) -> Result<(), String> {
-    let mut client = connect_client_service(state)?;
-    const DEFAULT_COMPOSITION_ID: &str = "default";
-    let default_exists = client
-        .latest_snapshot()
-        .durable_state
-        .compositions
-        .compositions
-        .iter()
-        .any(|composition| composition.id == DEFAULT_COMPOSITION_ID);
-    if !default_exists {
-        return Err(
-            "the Client service has no default composition; open Studio once to initialize it"
-                .to_owned(),
-        );
-    }
-
-    let has_root = client
-        .latest_snapshot()
-        .durable_state
-        .compositions
-        .compositions
-        .iter()
-        .find(|composition| composition.id == DEFAULT_COMPOSITION_ID)
-        .is_some_and(|composition| composition.root_package.is_some());
-    if !has_root {
-        send_client_action(
-            &mut client,
-            ClientAction::Composition(CompositionAction::ResolveDefaultRoot {
-                composition_id: DEFAULT_COMPOSITION_ID.to_owned(),
-            }),
-        )?;
-    }
-    launch_via_client_service(&mut client, DEFAULT_COMPOSITION_ID, "default")
 }
 
 fn launch_selected_composition(state: &ShellState) -> Result<(), String> {
@@ -252,11 +217,8 @@ pub(super) fn acquire_workshop_items(
 pub(super) fn print_service_operation_message(
     event: Option<vapor_client_protocol::OperationEvent>,
 ) {
-    if let Some(message) = event
-        .and_then(|event| event.message)
-        .filter(|message| !message.trim().is_empty())
-    {
-        println!("{message}");
+    if let Some(event) = event {
+        crate::console::print_operation_event(&event);
     }
 }
 

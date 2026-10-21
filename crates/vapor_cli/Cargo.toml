@@ -20,3 +20,4 @@ vapor_core.workspace = true
 vapor_client_provider.workspace = true
 vapor_client.workspace = true
 vapor_client_protocol.workspace = true
+vapor_console_core = { path = "../../../Vapor/crates/vapor_console_core" }
