@@ -107,23 +107,17 @@ configuration has two options:
 The entrypoint dispatches those choices to separate Launcher, Studio, IDE, and
 Installer GUI executables, all built from the shared Vapor-GUI host. Installer
 falls back to the precompiled bootstrap if its GUI is missing. Shell opens a
-terminal. These are the intended launch settings for
-the next Steam configuration update; the dashboard still has the previous
-Studio/Play/Shell/Installer matrix until that update is applied.
+terminal. These are the two supported Steam launch settings for both target
+depots.
 
 | Option | Linux | Windows |
 | --- | --- | --- |
 | Play Loo-Cast (default) | `bin/x86_64-unknown-linux-gnu/vapor-entrypoint` (no arguments) | `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe` (no arguments) |
 | Choose an app | `bin/x86_64-unknown-linux-gnu/vapor-entrypoint chooser` | `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe chooser` |
-Launch-time bootstrap failure is recorded under
-`<app-root>/.vapor/state/installer/bootstrap-failure.txt`; Shell reads that
-app-local state instead of inheriting wrapper environment variables. Running
-`vapor-installer` without arguments prints shim help/status for human-driven
-lifecycle work; scripts are the direct source-checkout command surface.
-The `installer` launch target skips headless install and opens
-`vapor-installer` directly, so users can manage
-install/uninstall/developer-mode state even when player-mode install is broken
-or intentionally removed.
+Running `vapor-installer` without arguments prints shim help/status for
+human-driven lifecycle work; scripts are the direct source-checkout command
+surface. The `installer` launch target opens the Installer GUI and falls back
+to the command-line recovery workflow if that GUI is unavailable.
 
 Player-mode install prepares only app-local basic runtime tooling:
 
@@ -138,15 +132,16 @@ rust-script --force <app-root>/resources/vapor/tools/production/app_setup/setup_
 rust-script --force <app-root>/resources/vapor/tools/production/app_setup/teardown_development.rs
 ```
 
-If launch-time install fails, the first visible Vapor Shell reports the
-failure and the exact setup command. For ordinary testers, reinstalling the Steam app is the
-preferred recovery because the app root is disposable and should not hold
-authoritative user data.
+Setup and role changes happen when the user opens Installer; normal launches
+do not run installation as a hidden preflight. For ordinary testers,
+reinstalling the Steam app is the preferred recovery because the app root is
+disposable and should not hold authoritative user data.
 
-The Steam **Play** launch target opens the dedicated Vapor Launcher. It lists
-compositions and offers the service-derived action for each: find a game,
-install, verify, repair, update, or play. An empty composition starts at
-Workshop discovery instead of trying to launch a missing root.
+The default Steam **Play Loo-Cast** launch target starts the default playable
+composition. The separate chooser opens the dedicated Vapor Launcher, which
+lists compositions and offers service-derived actions: find a game, install,
+verify, repair, update, or play. An empty composition starts at Workshop
+discovery instead of trying to launch a missing root.
 
 From Vapor Shell, `launch default` remains available as a CLI operation. It
 resolves the app manifest's default packagepack seed, installs that packagepack

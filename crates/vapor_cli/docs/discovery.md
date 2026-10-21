@@ -73,14 +73,12 @@ context matters.
 ## Steam and desktop launches
 
 Steam release launch options use `bin/<target>/vapor-entrypoint[.exe]` as the
-Steam-facing executable. That entrypoint opens the platform terminal and runs
-the matching `bin/vapor-launch.*` script inside it with the internal `--hold`
-wrapper flag. The script then runs
-`vapor` or `vapor-installer`, owns launch-target dispatch, owns the visible
-launch wrapper output, and keeps the terminal open when the launch option was
-started by Steam. Launch-time installer child-tool output is diagnostic output
-and goes to `<app-root>/.vapor/logs/installer.log`; bootstrap failure status is
-stored under `<app-root>/.vapor/state/installer/bootstrap-failure.txt`.
+Steam-facing executable. With no arguments it starts the default playable
+composition. The optional `chooser` argument opens the Vapor product chooser;
+its Launcher, Studio, IDE, and Installer routes are direct GUI launches, while
+Shell opens a terminal. The matching `bin/vapor-launch.*` script is used only
+for terminal-backed Shell and Installer recovery routes. Opening Shell does
+not implicitly run Installer setup.
 
 Vapor Shell itself does not open terminal windows. Directly starting `vapor`
 without a terminal is an invalid host launch shape; Steam and desktop launchers

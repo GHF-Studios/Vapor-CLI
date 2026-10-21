@@ -15,7 +15,11 @@ use crate::{
 };
 use clap::{Parser, Subcommand, error::ErrorKind};
 use clap_repl::{ClapEditor, ReadCommandOutput};
-use std::{ffi::OsString, path::Path};
+use std::{
+    ffi::OsString,
+    io::{self, Write},
+    path::Path,
+};
 
 enum StartupMode {
     Repl { startup_script: Option<String> },
@@ -452,6 +456,11 @@ fn open_saved_source(state: &mut ShellState) -> Result<(), String> {
 }
 
 fn run_shell(mut state: ShellState) {
+    if std::env::var_os("VAPOR_PLAIN_INPUT").is_some() {
+        run_plain_input_shell(state);
+        return;
+    }
+
     let mut editor = ClapEditor::<ShellCommand>::builder()
         .with_prompt(prompt_for(&state))
         .build();
@@ -495,6 +504,99 @@ fn run_shell(mut state: ShellState) {
     }
 }
 
+/// Run the shell using the operating system's normal echoed line input.
+///
+/// Some Windows console hosts do not repaint the editable input line reliably
+/// through Reedline. The launch wrapper opts into this simpler input path there
+/// so typed commands remain visible and usable.
+fn run_plain_input_shell(mut state: ShellState) {
+    let stdin = io::stdin();
+    let mut line = String::new();
+
+    loop {
+        print!("{}> ", state.prompt_context());
+        if let Err(error) = io::stdout().flush() {
+            eprintln!("error: terminal output failed: {error}");
+            break;
+        }
+
+        line.clear();
+        match stdin.read_line(&mut line) {
+            Ok(0) => break,
+            Ok(_) => {}
+            Err(error) => {
+                eprintln!("error: terminal input failed: {error}");
+                break;
+            }
+        }
+
+        let Some(command) = parse_plain_input(&line) else {
+            continue;
+        };
+        let summary = format!("{command:?}");
+        diagnostics::step(format!("shell command: {summary}"));
+        match command::execute(command, &mut state) {
+            Ok(Control::Continue) => {
+                diagnostics::event(format!("shell command ok: {summary}"));
+            }
+            Ok(Control::Exit) => {
+                diagnostics::event("shell command requested exit");
+                break;
+            }
+            Err(error) => {
+                diagnostics::record_error(format!("shell command error: {summary}: {error}"));
+                eprintln!("error: {error}");
+            }
+        }
+    }
+}
+
+fn parse_plain_input(line: &str) -> Option<ShellCommand> {
+    let words = match shlex::split(line) {
+        Some(words) => words,
+        None => {
+            eprintln!("error: input contains invalid or unclosed quoting");
+            return None;
+        }
+    };
+    if words.is_empty() {
+        return None;
+    }
+
+    let arguments = std::iter::once("vapor".to_owned())
+        .chain(words)
+        .collect::<Vec<_>>();
+    match ShellCommand::try_parse_from(arguments) {
+        Ok(command) => Some(command),
+        Err(error) => {
+            let _ = error.print();
+            None
+        }
+    }
+}
+
 fn prompt_for(state: &ShellState) -> Box<VaporPrompt> {
     Box::new(VaporPrompt::new(state.prompt_context()))
+}
+
+#[cfg(test)]
+mod plain_input_tests {
+    use super::parse_plain_input;
+    use crate::command::ShellCommand;
+
+    #[test]
+    fn plain_input_parses_commands_after_shell_quoting() {
+        assert!(matches!(
+            parse_plain_input("exit"),
+            Some(ShellCommand::Exit)
+        ));
+        assert!(parse_plain_input("  \t ").is_none());
+        assert!(parse_plain_input("source open 'unfinished").is_none());
+        assert!(matches!(
+            parse_plain_input("source open 'My Workspace'"),
+            Some(ShellCommand::Source {
+                command: crate::command::SourceCommand::Open { source }
+            }) if source == "My Workspace"
+        ));
+    }
 }

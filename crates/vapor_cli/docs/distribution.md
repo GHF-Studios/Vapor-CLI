@@ -190,17 +190,14 @@ bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe installer
   -> cmd /K after Vapor Installer exits
 ```
 
-The launch scripts run the shipped `vapor-installer install` shim first for
-Shell launch targets. The shim delegates to the script-owned setup layer,
-then the launch script selects the installed platform binary and command. The
-Installer launch target opens `vapor-installer` directly and skips headless
-install. Bootstrap failure is recorded as
-`<app-root>/.vapor/state/installer/bootstrap-failure.txt`; the launch wrapper
-prints only the session banner, failures, and terminal-hold message. The real
-implementation remains Vapor Shell. Entry points and scripts are not a
-substitute for target-specific app or content payloads; Vapor itself, engines,
-games, tools, and dynamic libraries all need runtime outputs staged per
-supported target.
+The launch scripts dispatch an explicit Installer request to `vapor-installer`
+and send GUI requests to the target entrypoint. Opening the ordinary Shell does
+not implicitly run Installer setup; setup and role changes belong to the
+Installer workflow. The Windows Shell uses the console's normal echoed line
+input because Reedline does not reliably paint the current input line in some
+Windows console hosts. Entry points and scripts are not a substitute for
+target-specific app or content payloads; Vapor itself, engines, games, tools,
+and dynamic libraries all need runtime outputs staged per supported target.
 
 The publish preflight requires app-local Rust/Cargo and cross-build tooling for
 the release matrix, a linked developer Git provider for explicit Git-backed
