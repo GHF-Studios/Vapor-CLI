@@ -1,10 +1,9 @@
 # Windows GNU/LLVM release proof
 
 This checklist proves the Windows side of the release target matrix without
-publishing Steam depot or Workshop changes. Steam's default launch opens Vapor
-Studio through the native entrypoint. Shell and Installer remain separate
-terminal recovery options; the Shell launch script runs the script-owned
-player-mode install through the `vapor-installer` shim before Shell starts.
+publishing Steam depot or Workshop changes. Steam's default launch starts the
+default playable composition through the native entrypoint. The optional
+`chooser` launch option opens Launcher, Studio, IDE, Installer, and Shell.
 
 The target is:
 
@@ -14,35 +13,19 @@ x86_64-pc-windows-gnullvm
 
 ## Steam launch
 
-The Windows Vapor Studio launch option should be the Steam default and target
-the native entrypoint shipped in the target-specific depot:
+Steam has two Windows launch options. Play Loo-Cast is the default and targets
+the native entrypoint shipped in the target-specific depot. Choose an app uses
+the same executable with `chooser` as its argument:
 
 ```text
-executable: bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe
-arguments:  studio
+Play Loo-Cast executable: bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe
+Play Loo-Cast arguments:  (empty)
+Choose an app executable: bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe
+Choose an app arguments:  chooser
 ```
 
-The separate Play option uses the same executable with `play`; it opens Studio
-in direct-play mode. Shell and Installer are recovery options:
-
-```text
-executable: bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe
-arguments:  shell
-```
-
-Clicking Shell should open a persistent `cmd` window running Vapor Shell. The
-user should not need to install Git before clicking Shell.
-
-The installer should also be exposed as its own launch option:
-
-```text
-executable: bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe
-arguments:  installer
-```
-
-Clicking Installer should open a persistent `cmd` window running
-`vapor-installer` directly. It should not run the quiet player-mode install
-before showing the installer/status surface.
+The chooser contains Launcher, Studio, IDE, Installer, and Shell. The player
+does not need separate Steam launch options for each product.
 
 ## First-run installer
 

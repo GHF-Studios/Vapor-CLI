@@ -94,44 +94,27 @@ for uploaded test builds. Add more branches only when there is a concrete build
 promotion need, such as a stable alpha branch distinct from internal dev.
 
 The depot must include `vapor-entrypoint[.exe]`, `vapor-gui[.exe]`,
-`vapor-installer[.exe]`, `vapor-launcher[.exe]`, and `vapor-ide-host[.exe]` under `bin/<target>`;
-the Vapor Shell binary is also required for the Shell recovery option. Steam's
-default launch option is **Vapor Studio** and must invoke the native entrypoint
-with the `studio` argument. The entrypoint starts Vapor-GUI for Studio or the dedicated Vapor Launcher
-binary for Play; these are GUI paths and do not open a terminal.
-Installer falls back to the precompiled bootstrap if Vapor-GUI is missing.
-Keep the Shell recovery option separate:
+`vapor-launcher[.exe]`, `vapor-studio[.exe]`, `vapor-ide[.exe]`,
+`vapor-installer-gui[.exe]`, and `vapor-installer[.exe]` under `bin/<target>`;
+the Vapor Shell binary is also required for the Shell route. The target Steam
+configuration has two options:
 
-- **Linux Vapor Studio (default)**: executable
-  `bin/x86_64-unknown-linux-gnu/vapor-entrypoint`,
-  arguments `studio`.
-- **Linux Play**: executable
-  `bin/x86_64-unknown-linux-gnu/vapor-entrypoint`,
-  arguments `play` (the Launcher installs or launches the selected composition).
-- **Linux Vapor Shell**: executable
-  `bin/x86_64-unknown-linux-gnu/vapor-entrypoint`,
-  arguments `shell`.
-- **Linux Vapor Installer**: executable
-  `bin/x86_64-unknown-linux-gnu/vapor-entrypoint`,
-  arguments `installer`.
-- **Windows Vapor Studio (default)**: executable
-  `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe`,
-  arguments `studio`.
-- **Windows Play**: executable
-  `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe`,
-  arguments `play` (the Launcher installs or launches the selected composition).
-- **Windows Vapor Shell**: executable
-  `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe`,
-  arguments `shell`.
-- **Windows Vapor Installer**: executable
-  `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe`,
-  arguments `installer`.
+- **Play Loo-Cast (default)**: native entrypoint executable with no arguments.
+  This launches the default composition through Vapor Client.
+- **Choose an app**: the same executable with `chooser` as its argument. This
+  opens the product chooser for Launcher, Studio, IDE, Installer, and Shell.
 
-The Linux and Windows entrypoints launch Vapor-GUI for `studio` and Vapor
-Launcher for `play`; both frontends use the shared Client service. `shell` and
-`installer` keep their recovery routes. Steam should enter the product chosen
-by its launch option; the Studio option opens the creator environment, while
-Play opens the selected composition's player setup.
+The entrypoint dispatches those choices to separate Launcher, Studio, IDE, and
+Installer GUI executables, all built from the shared Vapor-GUI host. Installer
+falls back to the precompiled bootstrap if its GUI is missing. Shell opens a
+terminal. These are the intended launch settings for
+the next Steam configuration update; the dashboard still has the previous
+Studio/Play/Shell/Installer matrix until that update is applied.
+
+| Option | Linux | Windows |
+| --- | --- | --- |
+| Play Loo-Cast (default) | `bin/x86_64-unknown-linux-gnu/vapor-entrypoint` (no arguments) | `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe` (no arguments) |
+| Choose an app | `bin/x86_64-unknown-linux-gnu/vapor-entrypoint chooser` | `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe chooser` |
 Launch-time bootstrap failure is recorded under
 `<app-root>/.vapor/state/installer/bootstrap-failure.txt`; Shell reads that
 app-local state instead of inheriting wrapper environment variables. Running

@@ -709,13 +709,13 @@ mod client_launch_tests {
     }
 
     #[test]
-    fn client_launch_defaults_to_the_studio_entrypoint_mode() {
+    fn client_launch_defaults_to_the_player_launcher() {
         let parsed = ShellCommand::try_parse_from(["vapor", "client", "launch"]).unwrap();
         assert!(matches!(
             parsed,
             ShellCommand::Client {
                 command: ClientCommand::Launch {
-                    mode: ClientLaunchMode::Studio,
+                    mode: ClientLaunchMode::Launcher,
                     ..
                 }
             }
@@ -766,6 +766,7 @@ mod client_launch_tests {
     fn client_launch_accepts_each_supported_entrypoint_mode() {
         for (argument, expected) in [
             ("launcher", ClientLaunchMode::Launcher),
+            ("chooser", ClientLaunchMode::Chooser),
             ("studio", ClientLaunchMode::Studio),
             ("play", ClientLaunchMode::Launcher),
             ("shell", ClientLaunchMode::Shell),
@@ -784,10 +785,10 @@ mod client_launch_tests {
     }
 
     #[test]
-    fn client_launcher_mode_uses_the_entrypoints_player_launch_route() {
+    fn client_launcher_mode_uses_the_dedicated_launcher_route() {
         assert_eq!(
             client_launch_arguments(ClientLaunchMode::Launcher, Vec::new()),
-            [OsString::from("play")]
+            [OsString::from("launcher")]
         );
     }
 

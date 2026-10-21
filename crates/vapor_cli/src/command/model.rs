@@ -249,8 +249,8 @@ pub enum ToolchainCommand {
 pub enum ClientCommand {
     /// Launch the locally deployed Steam entrypoint without Steam.
     Launch {
-        /// Entrypoint mode; defaults to the Studio home screen.
-        #[arg(value_enum, default_value = "studio")]
+        /// Entrypoint mode; defaults to the player Launcher.
+        #[arg(value_enum, default_value = "launcher")]
         mode: ClientLaunchMode,
         /// Arguments forwarded to the selected entrypoint mode after `--`.
         #[arg(last = true, allow_hyphen_values = true)]
@@ -271,6 +271,8 @@ pub enum ClientLaunchMode {
     /// Open the Vapor Launcher player experience.
     #[value(alias = "play")]
     Launcher,
+    /// Open the small product chooser.
+    Chooser,
     /// Open the Vapor Studio home screen.
     Studio,
     /// Open the Vapor command shell.
@@ -286,7 +288,8 @@ pub(super) fn client_launch_arguments(
     arguments: Vec<std::ffi::OsString>,
 ) -> Vec<std::ffi::OsString> {
     let mode = match mode {
-        ClientLaunchMode::Launcher => "play",
+        ClientLaunchMode::Launcher => "launcher",
+        ClientLaunchMode::Chooser => "chooser",
         ClientLaunchMode::Studio => "studio",
         ClientLaunchMode::Shell => "shell",
         ClientLaunchMode::Installer => "installer",

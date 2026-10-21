@@ -81,12 +81,15 @@ payload is split by the manifest-declared Steam depot includes:
   `examples/vapor-examples/` when the root source includes official examples.
 - `linux/` contains Linux runtime files: selected Linux `bin/<target>/`
   application binaries including `vapor`, `vapor-entrypoint`,
-  `vapor-installer`, `vapor-gui`, `vapor-launcher`, `vapor-client-service`, and
-  `vapor-ide-host`, plus `libsteam_api.so` and `bin/vapor-launch.sh`.
+  `vapor-installer`, `vapor-gui` (the chooser), `vapor-launcher`,
+  `vapor-studio`, `vapor-ide`, `vapor-installer-gui`, `vapor-client-service`,
+  and `vapor-ide-host`, plus `libsteam_api.so` and `bin/vapor-launch.sh`.
 - `windows/` contains Windows runtime files: selected Windows `bin/<target>/`
   application binaries including `vapor.exe`, `vapor-entrypoint.exe`,
-  `vapor-installer.exe`, `vapor-gui.exe`, `vapor-launcher.exe`, `vapor-client-service.exe`, and
-  `vapor-ide-host.exe`, including `steam_api64.dll` and other required Windows
+  `vapor-installer.exe`, `vapor-gui.exe` (the chooser), `vapor-launcher.exe`,
+  `vapor-studio.exe`, `vapor-ide.exe`, `vapor-installer-gui.exe`,
+  `vapor-client-service.exe`, and `vapor-ide-host.exe`, including
+  `steam_api64.dll` and other required Windows
   runtime DLLs, plus `bin/vapor-launch.cmd`.
 
 The service owns the Steamworks native library metadata and runtime packaging
@@ -136,32 +139,44 @@ target-specific app binaries into `bin/<target>/`, then use
 `root publish --skip-build --dry-run` only as a preview that confirms the
 imported files stage correctly.
 
-Steam's default launch target is Studio and starts the sibling Studio GUI directly.
-Play starts the dedicated Vapor Launcher executable. Installer opens its GUI product
-when available and falls back to the precompiled installer. Shell stays a
-terminal recovery option:
+Steam's default launch starts the app manifest's default playable composition
+directly. Its optional `chooser` launch option opens Launcher, Studio, IDE,
+Installer, and Shell. The CLI mirrors these routes with
+`vapor client launch [MODE]`.
+Installer opens its GUI product when available and falls back to the precompiled
+installer. Shell stays a terminal recovery option:
 
 ```text
-bin/x86_64-unknown-linux-gnu/vapor-entrypoint studio
-  -> bin/x86_64-unknown-linux-gnu/vapor-gui --mode studio
+bin/x86_64-unknown-linux-gnu/vapor-entrypoint
+  -> bin/x86_64-unknown-linux-gnu/vapor launch default
 
-bin/x86_64-unknown-linux-gnu/vapor-entrypoint play
-  -> bin/x86_64-unknown-linux-gnu/vapor-launcher --mode play
+bin/x86_64-unknown-linux-gnu/vapor-entrypoint chooser
+  -> bin/x86_64-unknown-linux-gnu/vapor-gui --mode chooser
+  -> re-enters vapor-entrypoint with the selected mode
+     studio -> vapor-studio
+     ide -> vapor-ide
+     installer -> vapor-installer-gui
+     shell -> Konsole -> vapor
 
 bin/x86_64-unknown-linux-gnu/vapor-entrypoint shell
   -> Konsole -> bin/vapor-launch.sh --hold shell
   -> bin/x86_64-unknown-linux-gnu/vapor
 
 bin/x86_64-unknown-linux-gnu/vapor-entrypoint installer
-  -> bin/x86_64-unknown-linux-gnu/vapor-gui --mode installer
+  -> bin/x86_64-unknown-linux-gnu/vapor-installer-gui
   -> if GUI is absent: Konsole -> bin/vapor-launch.sh --hold installer
   -> bin/x86_64-unknown-linux-gnu/vapor-installer
 
-bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe studio
-  -> bin\x86_64-pc-windows-gnullvm\vapor-gui.exe --mode studio
+bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe
+  -> bin\x86_64-pc-windows-gnullvm\vapor.exe launch default
 
-bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe play
-  -> bin\x86_64-pc-windows-gnullvm\vapor-launcher.exe --mode play
+bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe chooser
+  -> bin\x86_64-pc-windows-gnullvm\vapor-gui.exe --mode chooser
+  -> re-enters vapor-entrypoint with the selected mode
+     studio -> vapor-studio.exe
+     ide -> vapor-ide.exe
+     installer -> vapor-installer-gui.exe
+     shell -> cmd /C -> vapor
 
 bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe shell
   -> cmd /C -> bin\vapor-launch.cmd --hold shell
@@ -169,7 +184,7 @@ bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe shell
   -> cmd /K after Vapor exits
 
 bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe installer
-  -> bin\x86_64-pc-windows-gnullvm\vapor-gui.exe --mode installer
+  -> bin\x86_64-pc-windows-gnullvm\vapor-installer-gui.exe
   -> if GUI is absent: cmd /C -> bin\vapor-launch.cmd --hold installer
   -> bin\x86_64-pc-windows-gnullvm\vapor-installer.exe
   -> cmd /K after Vapor Installer exits

@@ -30,15 +30,16 @@ bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe play --send-diagnostics
 
 ## Client entrypoint
 
-### `client launch [launcher|studio|shell|installer|ide] [-- ARGUMENTS...]`
+### `client launch [launcher|chooser|studio|shell|installer|ide] [-- ARGUMENTS...]`
 
 Launch the locally deployed `vapor-entrypoint` using the host platform's
 runtime binary directory. This follows the same dispatch path as Steam without
-requiring Steam to launch it. The default mode is `studio`; arguments after
+requiring Steam to launch it. The default mode is `launcher`; arguments after
 `--` are forwarded through the entrypoint to the selected mode:
 
 ```text
-vapor client launch                         # Studio home
+vapor client launch                         # player Launcher
+vapor client launch chooser                 # small product chooser
 vapor client launch studio -- --workspace /path/to/workspace
 vapor client launch launcher                # player-focused Vapor Launcher
 vapor client launch play                    # compatibility alias for launcher
@@ -46,6 +47,11 @@ vapor client launch shell
 vapor client launch installer
 vapor client launch ide -- --workspace /path/to/rust/workspace
 ```
+
+The product chooser opens Launcher, Studio, IDE, Installer, or Shell through
+the Steam-facing entrypoint. Steam's normal launch starts the app's default
+playable composition directly; its optional `chooser` launch option exposes
+the apps. `vapor client launch` remains a direct way to open Launcher.
 
 The IDE is a developer-facing Rust workspace editor. It uses the shared Client
 service for workspace access and managed checks; it does not replace the
@@ -415,6 +421,8 @@ they are rejected for real uploads. The depot smoke check rejects staged
 platform depots when their matching `bin/vapor-launch.*` script,
 `bin/<target>/vapor-entrypoint[.exe]`, `bin/<target>/vapor[.exe]`,
 `bin/<target>/vapor-installer[.exe]`, `bin/<target>/vapor-gui[.exe]`,
+`bin/<target>/vapor-launcher[.exe]`, `bin/<target>/vapor-studio[.exe]`,
+`bin/<target>/vapor-ide[.exe]`, `bin/<target>/vapor-installer-gui[.exe]`,
 `bin/<target>/vapor-ide-host[.exe]`, or required Windows runtime DLL payload
 is missing. Launchable binaries are declared by each direct root workspace's
 `[workspace].binaries` list and promoted into the app root before staging.
