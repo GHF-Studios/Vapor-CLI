@@ -30,7 +30,7 @@ bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe play --send-diagnostics
 
 ## Client entrypoint
 
-### `client launch [launcher|studio|shell|installer] [-- ARGUMENTS...]`
+### `client launch [launcher|studio|shell|installer|ide] [-- ARGUMENTS...]`
 
 Launch the locally deployed `vapor-entrypoint` using the host platform's
 runtime binary directory. This follows the same dispatch path as Steam without
@@ -44,7 +44,12 @@ vapor client launch launcher                # player-focused Vapor Launcher
 vapor client launch play                    # compatibility alias for launcher
 vapor client launch shell
 vapor client launch installer
+vapor client launch ide -- --workspace /path/to/rust/workspace
 ```
+
+The IDE is a developer-facing Rust workspace editor. It uses the shared Client
+service for workspace access and managed checks; it does not replace the
+in-game Rhai Script Workbench.
 
 The installed CLI resolves its app instance from its own location. When
 running a source-built CLI from the managed build cache, set `VAPOR_HOME` to the

@@ -277,6 +277,8 @@ pub enum ClientLaunchMode {
     Shell,
     /// Open the installation/setup flow.
     Installer,
+    /// Open the Rust workspace IDE.
+    Ide,
 }
 
 pub(super) fn client_launch_arguments(
@@ -288,6 +290,7 @@ pub(super) fn client_launch_arguments(
         ClientLaunchMode::Studio => "studio",
         ClientLaunchMode::Shell => "shell",
         ClientLaunchMode::Installer => "installer",
+        ClientLaunchMode::Ide => "ide",
     };
     std::iter::once(std::ffi::OsString::from(mode))
         .chain(arguments)

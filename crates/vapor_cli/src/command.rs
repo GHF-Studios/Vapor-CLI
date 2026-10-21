@@ -770,6 +770,7 @@ mod client_launch_tests {
             ("play", ClientLaunchMode::Launcher),
             ("shell", ClientLaunchMode::Shell),
             ("installer", ClientLaunchMode::Installer),
+            ("ide", ClientLaunchMode::Ide),
         ] {
             let parsed =
                 ShellCommand::try_parse_from(["vapor", "client", "launch", argument]).unwrap();
