@@ -3,8 +3,8 @@
 #![forbid(unsafe_code)]
 
 mod app;
-mod cross_toolchain;
 mod console;
+mod cross_toolchain;
 mod diagnostics;
 mod git_provider;
 mod ide;

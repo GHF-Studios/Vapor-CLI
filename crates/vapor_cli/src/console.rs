@@ -21,10 +21,16 @@ pub(super) fn print_operation_event(event: &OperationEvent) {
         .target(event.action.as_str())
         .field("phase", format!("{:?}", event.phase));
     if let Some(progress) = event.progress {
-        record = record.field("progress", format!("{:.0}%", progress.clamp(0.0, 1.0) * 100.0));
+        record = record.field(
+            "progress",
+            format!("{:.0}%", progress.clamp(0.0, 1.0) * 100.0),
+        );
     }
 
-    let rendered = render_record(&record, io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none());
+    let rendered = render_record(
+        &record,
+        io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none(),
+    );
     if level == ConsoleLevel::Error {
         let _ = writeln!(io::stderr().lock(), "{rendered}");
     } else {
@@ -44,7 +50,13 @@ fn render_record(record: &ConsoleRecord, color: bool) -> String {
     let target = record.target.as_deref().unwrap_or(record.source.0.as_str());
     let prefix = format!("[{label}] [{target}]");
     let mut line = if color {
-        format!("{}{}{} {}", ansi_color(record.level.style_role()), prefix, "\x1b[0m", record.message)
+        format!(
+            "{}{}{} {}",
+            ansi_color(record.level.style_role()),
+            prefix,
+            "\x1b[0m",
+            record.message
+        )
     } else {
         format!("{prefix} {}", record.message)
     };
@@ -56,7 +68,9 @@ fn render_record(record: &ConsoleRecord, color: bool) -> String {
 
 fn ansi_color(role: ConsoleStyleRole) -> &'static str {
     match role {
-        ConsoleStyleRole::Muted | ConsoleStyleRole::Trace | ConsoleStyleRole::Metadata => "\x1b[90m",
+        ConsoleStyleRole::Muted | ConsoleStyleRole::Trace | ConsoleStyleRole::Metadata => {
+            "\x1b[90m"
+        }
         ConsoleStyleRole::Debug => "\x1b[36m",
         ConsoleStyleRole::Normal => "\x1b[97m",
         ConsoleStyleRole::Success => "\x1b[32m",
@@ -82,12 +96,20 @@ mod tests {
             progress: Some(1.0),
             message: Some("Installed the composition.".to_owned()),
         };
-        let record = ConsoleRecord::new(1, ConsoleLevel::Success, "vapor", "Installed the composition.")
-            .target(event.action)
-            .field("phase", format!("{:?}", event.phase))
-            .field("progress", "100%");
+        let record = ConsoleRecord::new(
+            1,
+            ConsoleLevel::Success,
+            "vapor",
+            "Installed the composition.",
+        )
+        .target(event.action)
+        .field("phase", format!("{:?}", event.phase))
+        .field("progress", "100%");
 
-        assert_eq!(render_record(&record, false), "[SUCCESS] [composition.install] Installed the composition.  phase=Complete  progress=100%");
+        assert_eq!(
+            render_record(&record, false),
+            "[SUCCESS] [composition.install] Installed the composition.  phase=Complete  progress=100%"
+        );
         assert!(render_record(&record, true).starts_with("\x1b[32m"));
     }
 }
