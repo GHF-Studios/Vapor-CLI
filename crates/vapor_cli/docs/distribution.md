@@ -139,8 +139,9 @@ target-specific app binaries into `bin/<target>/`, then use
 `root publish --skip-build --dry-run` only as a preview that confirms the
 imported files stage correctly.
 
-Steam's default launch starts the app manifest's default playable composition
-directly. Its optional `chooser` launch option opens Launcher, Studio, IDE,
+Steam's default launch starts the persistently selected playable composition
+through the Client service. The app manifest's `default` root only seeds an
+empty first-run selection. Its optional `chooser` launch option opens Launcher, Studio, IDE,
 Installer, and Shell. The CLI mirrors these routes with
 `vapor client launch [MODE]`.
 Installer opens its GUI product when available and falls back to the precompiled
@@ -148,7 +149,7 @@ installer. Shell stays a terminal recovery option:
 
 ```text
 bin/x86_64-unknown-linux-gnu/vapor-entrypoint
-  -> bin/x86_64-unknown-linux-gnu/vapor launch default
+  -> bin/x86_64-unknown-linux-gnu/vapor launch selected
 
 bin/x86_64-unknown-linux-gnu/vapor-entrypoint chooser
   -> bin/x86_64-unknown-linux-gnu/vapor-gui --mode chooser
@@ -168,7 +169,7 @@ bin/x86_64-unknown-linux-gnu/vapor-entrypoint installer
   -> bin/x86_64-unknown-linux-gnu/vapor-installer
 
 bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe
-  -> bin\x86_64-pc-windows-gnullvm\vapor.exe launch default
+  -> bin\x86_64-pc-windows-gnullvm\vapor.exe launch selected
 
 bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe chooser
   -> bin\x86_64-pc-windows-gnullvm\vapor-gui.exe --mode chooser

@@ -8,7 +8,7 @@ use std::path::PathBuf;
 #[command(
     name = "vapor",
     bin_name = "vapor",
-    after_help = "Run `help COMMAND` for details on one command group.\nNormal tester launches start with `launch default`; developer work starts with script-prepared tooling, then `source open SOURCE`."
+    after_help = "Run `help COMMAND` for details on one command group.\nNormal play launches the persistently selected composition; `launch default` is retained as a compatibility alias. Developer work starts with script-prepared tooling, then `source open SOURCE`."
 )]
 /// Commands accepted by the Vapor shell and its narrow host facades.
 pub enum ShellCommand {
@@ -22,7 +22,7 @@ pub enum ShellCommand {
         /// This starts telemetry session capture; use the Devtools/Tracy UI for analysis.
         #[arg(long)]
         profiling: bool,
-        /// Installed composition to launch. Omit to launch the app's default composition.
+        /// Installed composition to launch. Omit to launch the persistent selection.
         #[command(subcommand)]
         command: Option<LaunchCommand>,
     },
@@ -173,7 +173,7 @@ pub enum ShellCommand {
 /// Playable launch targets.
 #[derive(Debug, Subcommand)]
 pub enum LaunchCommand {
-    /// Launch the app manifest's default playable composition through Client.
+    /// Compatibility alias for launching the persistent selection.
     Default,
     /// Launch the composition selected in Studio through Client.
     Selected,

@@ -50,8 +50,10 @@ vapor client launch ide -- --workspace /path/to/rust/workspace
 
 The product chooser opens Launcher, Studio, IDE, Installer, or Shell through
 the Steam-facing entrypoint. Steam's normal launch starts the app's default
-playable composition directly; its optional `chooser` launch option exposes
-the apps. `vapor client launch` remains a direct way to open Launcher.
+playable composition through the Client service; the manifest's default is
+only the first-run seed. `launch default` is a compatibility spelling for the
+persistent selection. Its optional `chooser` launch option exposes the apps.
+`vapor client launch` remains a direct way to open Launcher.
 
 The IDE is a developer-facing Rust workspace editor. It uses the shared Client
 service for workspace access and managed checks; it does not replace the
