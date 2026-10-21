@@ -27,6 +27,13 @@ pub enum ShellCommand {
         command: Option<LaunchCommand>,
     },
 
+    /// Install, verify, repair, update, or launch a playable composition through the Client service.
+    Composition {
+        /// Composition lifecycle operation.
+        #[command(subcommand)]
+        command: CompositionCommand,
+    },
+
     /// Build and locally deploy the Vapor Client workspace from source.
     Client {
         /// Client operation.
@@ -172,6 +179,64 @@ pub enum LaunchCommand {
     Selected,
 }
 
+#[derive(Debug, Subcommand)]
+/// Operations on an installed playable composition through the shared service.
+pub enum CompositionCommand {
+    /// List compositions and their local installation state from the shared service.
+    List,
+    /// Install the composition's exact resolved content graph.
+    Install {
+        /// ID shown by the composition list in Studio.
+        composition_id: String,
+    },
+    /// Verify the installed content graph and executable.
+    Verify {
+        /// ID shown by the composition list in Studio.
+        composition_id: String,
+    },
+    /// Repair the composition's installed content graph.
+    Repair {
+        /// ID shown by the composition list in Studio.
+        composition_id: String,
+    },
+    /// Update the composition from its selected source or Workshop content.
+    Update {
+        /// ID shown by the composition list in Studio.
+        composition_id: String,
+    },
+    /// Launch the installed composition and wait for it to exit.
+    Launch {
+        /// ID shown by the composition list in Studio.
+        composition_id: String,
+    },
+}
+
+impl CompositionCommand {
+    /// Return the selected composition identity.
+    pub fn composition_id(&self) -> Option<&str> {
+        match self {
+            Self::List => None,
+            Self::Install { composition_id }
+            | Self::Verify { composition_id }
+            | Self::Repair { composition_id }
+            | Self::Update { composition_id }
+            | Self::Launch { composition_id } => Some(composition_id),
+        }
+    }
+
+    /// Return the operation's stable command name.
+    pub fn operation_name(&self) -> &'static str {
+        match self {
+            Self::List => "list",
+            Self::Install { .. } => "install",
+            Self::Verify { .. } => "verify",
+            Self::Repair { .. } => "repair",
+            Self::Update { .. } => "update",
+            Self::Launch { .. } => "launch",
+        }
+    }
+}
+
 /// Utilities installed by the version-pinned Vapor toolchain.
 #[derive(Debug, Subcommand)]
 pub enum ToolchainCommand {
@@ -203,10 +268,11 @@ pub enum ClientCommand {
 /// Modes accepted by the deployed Vapor Steam entrypoint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ClientLaunchMode {
+    /// Open the Vapor Launcher player experience.
+    #[value(alias = "play")]
+    Launcher,
     /// Open the Vapor Studio home screen.
     Studio,
-    /// Play the active profile composition.
-    Play,
     /// Open the Vapor command shell.
     Shell,
     /// Open the installation/setup flow.
@@ -218,8 +284,8 @@ pub(super) fn client_launch_arguments(
     arguments: Vec<std::ffi::OsString>,
 ) -> Vec<std::ffi::OsString> {
     let mode = match mode {
+        ClientLaunchMode::Launcher => "play",
         ClientLaunchMode::Studio => "studio",
-        ClientLaunchMode::Play => "play",
         ClientLaunchMode::Shell => "shell",
         ClientLaunchMode::Installer => "installer",
     };

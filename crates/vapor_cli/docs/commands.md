@@ -30,7 +30,7 @@ bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe play --send-diagnostics
 
 ## Client entrypoint
 
-### `client launch [studio|play|shell|installer] [-- ARGUMENTS...]`
+### `client launch [launcher|studio|shell|installer] [-- ARGUMENTS...]`
 
 Launch the locally deployed `vapor-entrypoint` using the host platform's
 runtime binary directory. This follows the same dispatch path as Steam without
@@ -40,7 +40,8 @@ requiring Steam to launch it. The default mode is `studio`; arguments after
 ```text
 vapor client launch                         # Studio home
 vapor client launch studio -- --workspace /path/to/workspace
-vapor client launch play                    # the active profile
+vapor client launch launcher                # player-focused Vapor Launcher
+vapor client launch play                    # compatibility alias for launcher
 vapor client launch shell
 vapor client launch installer
 ```
@@ -49,6 +50,9 @@ The installed CLI resolves its app instance from its own location. When
 running a source-built CLI from the managed build cache, set `VAPOR_HOME` to the
 local app-instance root first. If the entrypoint is missing, run `client deploy
 local` from the source workspace.
+
+To launch a specific installed composition, use `composition launch ID`; the
+`launcher` mode opens the player interface and does not launch a game by itself.
 
 ## Launch
 
@@ -73,6 +77,24 @@ the game handoff. Workshop acquisition uses the signed-in Steam client account.
 Launch the composition selected in Studio through the same service, without
 changing selection. If no playable composition is selected, open Studio and
 choose one first.
+
+### `composition list` and `composition <install|verify|repair|update|launch> COMPOSITION_ID`
+
+List playable compositions and their install state, or run a lifecycle operation
+on one through the shared Client service. The list marks the active composition.
+After the service restarts, installation state is shown as `not checked` until
+that composition is verified or used. Run `verify` to refresh it. The service
+resolves source and Workshop content, dependencies, installation state, and
+launch handoff; the CLI does not implement a second content installer.
+
+```text
+vapor composition list
+vapor composition install composition-1
+vapor composition verify composition-1
+vapor composition repair composition-1
+vapor composition update composition-1
+vapor composition launch composition-1
+```
 
 `launch --current-workspace` remains the separate developer path for running a
 workspace's default source configuration with the managed Rust toolchain.
@@ -570,7 +592,9 @@ publishing packages that matrix by default. Real publication rejects `--target`
 and `--host-only` and requires the declared matrix to contain Linux and Windows
 targets. It validates and builds that matrix before packaging and upload.
 Real publication preflight requires app-local Rust/Cargo, cross-build tooling,
-and SteamCMD. Repeat `--target` or use `--host-only` only for dry-run previews.
+and SteamCMD. An artifact ID may omit its version only when it identifies one
+source project in the open workspace; use `ID@VERSION` when the ID has multiple
+versions. Repeat `--target` or use `--host-only` only for dry-run previews.
 
 The intended release path is plain `content publish ...`: one Workshop item
 update per artifact, with all supported platform binaries and libraries inside

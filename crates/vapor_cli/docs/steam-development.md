@@ -94,11 +94,11 @@ for uploaded test builds. Add more branches only when there is a concrete build
 promotion need, such as a stable alpha branch distinct from internal dev.
 
 The depot must include `vapor-entrypoint[.exe]`, `vapor-gui[.exe]`,
-`vapor-installer[.exe]`, and `vapor-ide-host[.exe]` under `bin/<target>`;
+`vapor-installer[.exe]`, `vapor-launcher[.exe]`, and `vapor-ide-host[.exe]` under `bin/<target>`;
 the Vapor Shell binary is also required for the Shell recovery option. Steam's
 default launch option is **Vapor Studio** and must invoke the native entrypoint
-with the `studio` argument. The entrypoint starts the sibling Vapor-GUI binary
-with the selected mode; this is a GUI path and does not open a terminal.
+with the `studio` argument. The entrypoint starts Vapor-GUI for Studio or the dedicated Vapor Launcher
+binary for Play; these are GUI paths and do not open a terminal.
 Installer falls back to the precompiled bootstrap if Vapor-GUI is missing.
 Keep the Shell recovery option separate:
 
@@ -107,7 +107,7 @@ Keep the Shell recovery option separate:
   arguments `studio`.
 - **Linux Play**: executable
   `bin/x86_64-unknown-linux-gnu/vapor-entrypoint`,
-  arguments `play` (Studio launches the selected profile composition).
+  arguments `play` (the Launcher installs or launches the selected composition).
 - **Linux Vapor Shell**: executable
   `bin/x86_64-unknown-linux-gnu/vapor-entrypoint`,
   arguments `shell`.
@@ -119,7 +119,7 @@ Keep the Shell recovery option separate:
   arguments `studio`.
 - **Windows Play**: executable
   `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe`,
-  arguments `play` (Studio launches the selected profile composition).
+  arguments `play` (the Launcher installs or launches the selected composition).
 - **Windows Vapor Shell**: executable
   `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe`,
   arguments `shell`.
@@ -127,11 +127,11 @@ Keep the Shell recovery option separate:
   `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe`,
   arguments `installer`.
 
-The Linux and Windows entrypoints launch Studio for both `studio` and `play`;
-`play` adds Studio's `--play` mode, which builds and runs the selected profile
-composition. `shell` and `installer` continue through the terminal wrapper. Set
-the Steam default launch option to Studio, not Play, so users arrive at the GUI
-without automatically launching a composition.
+The Linux and Windows entrypoints launch Vapor-GUI for `studio` and Vapor
+Launcher for `play`; both frontends use the shared Client service. `shell` and
+`installer` keep their recovery routes. Steam should enter the product chosen
+by its launch option; the Studio option opens the creator environment, while
+Play opens the selected composition's player setup.
 Launch-time bootstrap failure is recorded under
 `<app-root>/.vapor/state/installer/bootstrap-failure.txt`; Shell reads that
 app-local state instead of inheriting wrapper environment variables. Running
@@ -160,9 +160,10 @@ failure and the exact setup command. For ordinary testers, reinstalling the Stea
 preferred recovery because the app root is disposable and should not hold
 authoritative user data.
 
-The Steam **Play** launch target opens Vapor Studio with `--play`, which loads
-the selected profile and attempts to run its composition. If no usable profile
-selection exists, Studio remains open and explains what needs attention.
+The Steam **Play** launch target opens the dedicated Vapor Launcher. It lists
+compositions and offers the service-derived action for each: find a game,
+install, verify, repair, update, or play. An empty composition starts at
+Workshop discovery instead of trying to launch a missing root.
 
 From Vapor Shell, `launch default` remains available as a CLI operation. It
 resolves the app manifest's default packagepack seed, installs that packagepack

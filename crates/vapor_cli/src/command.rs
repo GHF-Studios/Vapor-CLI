@@ -18,6 +18,7 @@ use crate::{
     workspace::{SourceRootKind, WorkspaceManifest},
 };
 mod client_commands;
+mod composition_commands;
 pub(crate) use client_commands::execute_client;
 pub(crate) use client_commands::{
     connect_client_service, send_client_action, send_client_action_with_authoring_result,
@@ -62,6 +63,9 @@ fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control
             command,
         } => {
             client_commands::execute_launch(command, current_workspace, profiling, state)?;
+        }
+        ShellCommand::Composition { command } => {
+            composition_commands::execute_composition(command, state)?;
         }
         ShellCommand::Toolchain { command } => match command {
             ToolchainCommand::Tracy => {
@@ -725,10 +729,45 @@ mod client_launch_tests {
     }
 
     #[test]
+    fn composition_lifecycle_commands_are_first_class_cli_operations() {
+        for (operation, expected) in [
+            ("install", "install"),
+            ("verify", "verify"),
+            ("repair", "repair"),
+            ("update", "update"),
+            ("launch", "launch"),
+        ] {
+            let parsed = ShellCommand::try_parse_from([
+                "vapor",
+                "composition",
+                operation,
+                "demo-composition",
+            ])
+            .unwrap();
+            let ShellCommand::Composition { command } = parsed else {
+                panic!("composition operation should parse as a composition command");
+            };
+            assert_eq!(command.operation_name(), expected);
+            assert_eq!(command.composition_id(), Some("demo-composition"));
+        }
+    }
+
+    #[test]
+    fn composition_list_needs_no_identifier() {
+        let parsed = ShellCommand::try_parse_from(["vapor", "composition", "list"]).unwrap();
+        let ShellCommand::Composition { command } = parsed else {
+            panic!("composition list should parse as a composition command");
+        };
+        assert_eq!(command.operation_name(), "list");
+        assert_eq!(command.composition_id(), None);
+    }
+
+    #[test]
     fn client_launch_accepts_each_supported_entrypoint_mode() {
         for (argument, expected) in [
+            ("launcher", ClientLaunchMode::Launcher),
             ("studio", ClientLaunchMode::Studio),
-            ("play", ClientLaunchMode::Play),
+            ("play", ClientLaunchMode::Launcher),
             ("shell", ClientLaunchMode::Shell),
             ("installer", ClientLaunchMode::Installer),
         ] {
@@ -741,6 +780,14 @@ mod client_launch_tests {
                 } if mode == expected
             ));
         }
+    }
+
+    #[test]
+    fn client_launcher_mode_uses_the_entrypoints_player_launch_route() {
+        assert_eq!(
+            client_launch_arguments(ClientLaunchMode::Launcher, Vec::new()),
+            [OsString::from("play")]
+        );
     }
 
     #[test]

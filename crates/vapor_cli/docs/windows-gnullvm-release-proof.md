@@ -61,14 +61,14 @@ Expected setup behavior:
   `tools\steamcmd`.
 - Zig is downloaded as the portable Windows zip and extracted under
   `tools\zig`; Vapor writes linker wrappers under `tools\cross`.
-- llvm-mingw is downloaded as a portable archive and extracted under
-  `tools\llvm-mingw`.
+- the pinned llvm-mingw UCRT archive is downloaded, checksum-verified, and
+  extracted under `tools\llvm-mingw` for `x86_64-pc-windows-gnullvm`.
 
 No downloaded setup component should run a system installer, write to a global
 Git/tool location, or mutate machine-wide PATH state.
 
 The Windows GNU/LLVM and Linux GNU cross-linker path is app-local and portable.
-Vapor uses llvm-mingw from `tools\llvm-mingw` for Windows GNU/LLVM and Zig
+Vapor uses UCRT llvm-mingw from `tools\llvm-mingw` for Windows GNU/LLVM and Zig
 from `tools\zig` for Linux GNU cross-links. This proof must not require Visual
 Studio, MSVC, system MinGW, or a machine-wide compiler install.
 

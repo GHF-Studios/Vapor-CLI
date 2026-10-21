@@ -223,6 +223,7 @@ fn execute_content_body(command: ContentCommand, state: &ShellState) -> Result<(
             )?;
             let Some(AuthoringResultKind::ContentPackaged {
                 id,
+                selector: packaged_selector,
                 root,
                 target,
                 fingerprint,
@@ -239,6 +240,12 @@ fn execute_content_body(command: ContentCommand, state: &ShellState) -> Result<(
             if dry_run != report_is_dry_run {
                 return Err(
                     "Vapor Client returned a package result that does not match the requested mode."
+                        .to_owned(),
+                );
+            }
+            if packaged_selector != artifact {
+                return Err(
+                    "Vapor Client returned a package result for a different content version."
                         .to_owned(),
                 );
             }
