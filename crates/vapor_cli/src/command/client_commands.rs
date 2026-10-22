@@ -483,17 +483,7 @@ fn send_client_action_inner(
             {
                 finish_cli_progress(last_rendered_progress.is_some());
                 last_rendered_progress = None;
-                let write_result = match output.stream {
-                    vapor_client_protocol::OperationOutputStream::Stdout => {
-                        let mut stdout = std::io::stdout().lock();
-                        writeln!(stdout, "{}", output.text).and_then(|_| stdout.flush())
-                    }
-                    vapor_client_protocol::OperationOutputStream::Stderr => {
-                        let mut stderr = std::io::stderr().lock();
-                        writeln!(stderr, "{}", output.text).and_then(|_| stderr.flush())
-                    }
-                };
-                write_result.map_err(|error| {
+                crate::console::print_operation_output(&output).map_err(|error| {
                     format!("could not render managed operation output: {error}")
                 })?;
             }

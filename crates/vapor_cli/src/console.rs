@@ -38,6 +38,41 @@ pub(super) fn print_operation_event(event: &OperationEvent) {
     }
 }
 
+pub(super) fn print_operation_output(
+    output: &vapor_client_protocol::OperationOutputEvent,
+) -> io::Result<()> {
+    let text = &output.text;
+    let color = io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
+    for line in text.lines() {
+        let mut record = ConsoleRecord::new(
+            output.timestamp_unix_ms,
+            output.level,
+            if output.source.is_empty() { "vapor" } else { &output.source },
+            line,
+        )
+        .target(output.action.clone())
+        .field("stream", format!("{:?}", output.stream).to_ascii_lowercase())
+        .field("operation", output.id.clone());
+        if let Some(process) = &output.process {
+            record = record.field("process", process.clone());
+        }
+        let rendered = render_record(&record, color);
+        match output.stream {
+            vapor_client_protocol::OperationOutputStream::Stdout => {
+                let mut stdout = io::stdout().lock();
+                writeln!(stdout, "{rendered}")?;
+                stdout.flush()?;
+            }
+            vapor_client_protocol::OperationOutputStream::Stderr => {
+                let mut stderr = io::stderr().lock();
+                writeln!(stderr, "{rendered}")?;
+                stderr.flush()?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn now_unix_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
