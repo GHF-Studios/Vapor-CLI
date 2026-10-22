@@ -399,12 +399,19 @@ pub(crate) fn active_source_root(state: &ShellState) -> Result<Option<PathBuf>, 
         return Ok(Some(PathBuf::from(root)));
     }
     let mut client = super::connect_client_service(state)?;
+    crate::diagnostics::event(
+        "source context: requesting registered-source selection from service",
+    );
     let (_, result) = super::send_client_action_with_authoring_result(
         &mut client,
         ClientAction::Authoring(AuthoringAction::ListRegisteredSources),
     )?;
     match result {
         Some(AuthoringResultKind::RegisteredSources { active, .. }) => {
+            crate::diagnostics::event(format!(
+                "source context: service returned active source: {}",
+                active.as_deref().unwrap_or("none")
+            ));
             Ok(active.map(PathBuf::from))
         }
         _ => Err("Vapor Client service did not return the active source".to_owned()),

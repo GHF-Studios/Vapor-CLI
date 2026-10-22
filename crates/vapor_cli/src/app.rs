@@ -60,6 +60,7 @@ fn run_inner(startup: StartupMode) -> Result<(), String> {
     diagnostics::event(format!("startup mode: {}", startup.diagnostic_label()));
     diagnostics::record_startup_mode(startup.diagnostic_label());
 
+    diagnostics::event("startup: discovering installation");
     let installation = EnvironmentPaths::discover_installation()?;
     diagnostics::record_installation(&installation);
     diagnostics::event(format!(
@@ -68,7 +69,9 @@ fn run_inner(startup: StartupMode) -> Result<(), String> {
         installation.identity_id()
     ));
     let mut state = ShellState::closed(installation);
+    diagnostics::event("startup: restoring saved source selection");
     open_saved_source(&mut state)?;
+    diagnostics::event("startup: saved source selection restored");
     diagnostics::record_source_context(state.source());
 
     if let StartupMode::Direct(command) = startup {

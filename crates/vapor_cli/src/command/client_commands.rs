@@ -349,17 +349,27 @@ fn send_client_action_inner(
     let request_id = client
         .send(action, Some(client.latest_snapshot().revision))
         .map_err(|error| error.to_string())?;
+    diagnostics::event(format!(
+        "service request {request_id:?} sent; authoring result expected={expects_authoring_result}"
+    ));
     let deadline = Instant::now() + RESPONSE_TIMEOUT;
     let response = loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
             return Err("timed out waiting for Vapor Client service response".to_owned());
         }
-        match client
-            .recv_timeout(remaining)
-            .map_err(|error| error.to_string())?
-        {
+        match client.recv_timeout(remaining).map_err(|error| {
+            diagnostics::event(format!(
+                "service request {request_id:?} failed while awaiting response: {error}"
+            ));
+            error.to_string()
+        })? {
             ProtocolFrame::Response(response) if response.request_id == request_id => {
+                diagnostics::event(format!(
+                    "service request {request_id:?} returned {:?}; request operation={}",
+                    response.kind,
+                    response.operation_id.as_deref().unwrap_or("none")
+                ));
                 break *response;
             }
             ProtocolFrame::Event(ClientEvent::ProtocolError(error)) => return Err(error.message),
@@ -378,10 +388,8 @@ fn send_client_action_inner(
         return Ok((None, None));
     }
     let operation_id = response
-        .snapshot
-        .active_operation
-        .as_ref()
-        .map(|operation| operation.id.clone())
+        .operation_id
+        .clone()
         .ok_or_else(|| "service accepted an operation without returning its identity".to_owned())?;
     let deadline = Instant::now() + OPERATION_TIMEOUT;
     let mut completed_event = None;

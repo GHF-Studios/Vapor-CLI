@@ -161,7 +161,11 @@ pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(
                 println!("build: skipped; using already-promoted app binaries");
             }
             let mut client = connect_client_service(state)?;
+            crate::diagnostics::event("root publish: opening selected source workspace");
             open_workspace_in_service(&mut client, state)?;
+            crate::diagnostics::event(
+                "root publish: source workspace opened; requesting release stage",
+            );
             let stage_event = send_client_action(
                 &mut client,
                 ClientAction::Publishing(PublishingAction::StageApplication {
@@ -176,6 +180,10 @@ pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(
                 "Vapor Client accepted application release staging without returning its completion"
                     .to_owned()
             })?;
+            crate::diagnostics::event(format!(
+                "root publish: release stage operation {} completed; awaiting its review snapshot",
+                stage_event.id
+            ));
             let review = wait_for_application_release_review(&mut client, &stage_event.id)?;
             print_service_operation_message(Some(stage_event));
             println!("payload: split runtime depots");
