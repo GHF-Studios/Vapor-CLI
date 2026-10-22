@@ -47,11 +47,18 @@ pub(super) fn print_operation_output(
         let mut record = ConsoleRecord::new(
             output.timestamp_unix_ms,
             output.level,
-            if output.source.is_empty() { "vapor" } else { &output.source },
+            if output.source.is_empty() {
+                "vapor"
+            } else {
+                &output.source
+            },
             line,
         )
         .target(output.action.clone())
-        .field("stream", format!("{:?}", output.stream).to_ascii_lowercase())
+        .field(
+            "stream",
+            format!("{:?}", output.stream).to_ascii_lowercase(),
+        )
         .field("operation", output.id.clone());
         if let Some(process) = &output.process {
             record = record.field("process", process.clone());
