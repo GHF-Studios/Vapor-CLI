@@ -54,6 +54,7 @@ pub(super) fn print_operation_output(
             },
             line,
         )
+        .field("origin", output.origin.label())
         .target(output.action.clone())
         .field(
             "stream",
@@ -62,6 +63,9 @@ pub(super) fn print_operation_output(
         .field("operation", output.id.clone());
         if let Some(process) = &output.process {
             record = record.field("process", process.clone());
+        }
+        if let Some(composition_id) = &output.composition_id {
+            record = record.field("composition", composition_id.clone());
         }
         let rendered = render_record(&record, color);
         match output.stream {
