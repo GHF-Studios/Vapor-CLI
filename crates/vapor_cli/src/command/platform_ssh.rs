@@ -1,20 +1,19 @@
-//! Local client for requesting explicitly approved, temporary Platform SSH access.
+//! Request short-lived Platform SSH access through a one-time Identity browser authorization.
 
-use super::{
-    PlatformCommand, PlatformSshCapability, PlatformSshCommand, PlatformSshCredentialCommand,
-};
+use super::{PlatformCommand, PlatformSshCapability, PlatformSshCommand};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
     process::Command,
-    time::Duration,
+    thread,
+    time::{Duration, Instant},
 };
 use vapor_core::VaporInstallation;
 
 const DEFAULT_PLATFORM_ORIGIN: &str = "https://vapor.ghf-studios.site";
-const REQUEST_SCOPE: &str = "platform:ssh-access:request";
+const AUTHORIZATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 #[derive(Serialize)]
 struct CreateRequest<'a> {
@@ -22,6 +21,35 @@ struct CreateRequest<'a> {
     purpose: &'a str,
     requested_capabilities: Vec<&'static str>,
     requested_duration_seconds: i64,
+}
+
+#[derive(Serialize)]
+struct StartAuthorization<'a> {
+    ssh_fingerprint: &'a str,
+    purpose: &'a str,
+    requested_capabilities: Vec<&'static str>,
+    requested_duration_seconds: i64,
+}
+
+#[derive(Deserialize)]
+struct StartedAuthorization {
+    device_code: String,
+    user_code: String,
+    verification_uri: String,
+    expires_in_seconds: u64,
+    poll_interval_seconds: u64,
+}
+
+#[derive(Serialize)]
+struct PollAuthorization<'a> {
+    device_code: &'a str,
+}
+
+#[derive(Deserialize)]
+struct PolledAuthorization {
+    status: String,
+    credential_token: Option<String>,
+    poll_interval_seconds: u64,
 }
 
 #[derive(Deserialize)]
@@ -39,21 +67,6 @@ pub(crate) fn execute(command: PlatformCommand) -> Result<(), String> {
     let store = LocalStore::new(installation.user_data_root());
 
     match command {
-        PlatformSshCommand::Credential { command } => match command {
-            PlatformSshCredentialCommand::Set => store.set_credential(),
-            PlatformSshCredentialCommand::Status => {
-                if store.credential_path().is_file() {
-                    println!("Platform SSH request credential: configured");
-                } else {
-                    println!("Platform SSH request credential: not configured");
-                    println!(
-                        "Create a credential with the `{REQUEST_SCOPE}` scope in Identity, then run `vapor platform ssh credential set`."
-                    );
-                }
-                Ok(())
-            }
-            PlatformSshCredentialCommand::Clear => store.clear_credential(),
-        },
         PlatformSshCommand::Request {
             purpose,
             duration_hours,
@@ -74,10 +87,6 @@ impl LocalStore {
         }
     }
 
-    fn credential_path(&self) -> PathBuf {
-        self.root.join("request-credential")
-    }
-
     fn key_path(&self) -> PathBuf {
         self.root.join("id_ed25519")
     }
@@ -86,32 +95,6 @@ impl LocalStore {
         fs::create_dir_all(&self.root)
             .map_err(|error| format!("could not create {}: {error}", self.root.display()))?;
         set_private_directory_permissions(&self.root)?;
-        Ok(())
-    }
-
-    fn set_credential(&self) -> Result<(), String> {
-        let token = rpassword::prompt_password("One-time Platform request credential: ")
-            .map_err(|error| format!("could not read the credential securely: {error}"))?;
-        let token = token.trim();
-        if !valid_request_credential(token) {
-            return Err("that does not look like a Vapor request credential; it must start with `vap_req_` and contain 64 hexadecimal characters".to_owned());
-        }
-        self.ensure_private_directory()?;
-        write_private_file(&self.credential_path(), token.as_bytes())?;
-        println!(
-            "Platform SSH request credential stored for this user. It was not displayed or added to shell history."
-        );
-        Ok(())
-    }
-
-    fn clear_credential(&self) -> Result<(), String> {
-        match fs::remove_file(self.credential_path()) {
-            Ok(()) => println!("Platform SSH request credential removed."),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                println!("No local Platform SSH request credential was stored.");
-            }
-            Err(error) => return Err(format!("could not remove the stored credential: {error}")),
-        }
         Ok(())
     }
 
@@ -126,9 +109,7 @@ impl LocalStore {
                 }
             }
         }
-        println!(
-            "Local Platform SSH key removed. Any already-approved server grant remains until its approved expiry or operator revocation."
-        );
+        println!("Local Platform SSH key removed. Any approved server grant remains until its approved expiry or operator revocation.");
         Ok(())
     }
 
@@ -138,17 +119,6 @@ impl LocalStore {
         duration_hours: u8,
         capability: Vec<PlatformSshCapability>,
     ) -> Result<(), String> {
-        let token = fs::read_to_string(self.credential_path()).map_err(|error| {
-            if error.kind() == std::io::ErrorKind::NotFound {
-                format!("no Platform SSH request credential is configured; create one with the `{REQUEST_SCOPE}` scope in Identity, then run `vapor platform ssh credential set`")
-            } else {
-                format!("could not read the local Platform SSH request credential: {error}")
-            }
-        })?;
-        let token = token.trim();
-        if !valid_request_credential(token) {
-            return Err("the local Platform SSH request credential is invalid; replace it with `vapor platform ssh credential set`".to_owned());
-        }
         if purpose.trim().is_empty() {
             return Err("the SSH request purpose cannot be empty".to_owned());
         }
@@ -156,32 +126,73 @@ impl LocalStore {
             return Err("select at least one SSH capability".to_owned());
         }
         if capability.contains(&PlatformSshCapability::HostAdmin) && capability.len() != 1 {
-            return Err("`host-admin` must be requested by itself; the server requires a separate approval confirmation for it".to_owned());
+            return Err("`host-admin` must be requested by itself; the operator requires a separate confirmation for it".to_owned());
         }
 
         self.ensure_private_directory()?;
         let private_key = self.ensure_key_pair()?;
-        let public_key = fs::read_to_string(public_key_path(&private_key))
+        let public_path = public_key_path(&private_key);
+        let public_key = fs::read_to_string(&public_path)
             .map_err(|error| format!("could not read the SSH public key: {error}"))?;
+        let fingerprint = ssh_fingerprint(&public_path)?;
         let origin = platform_origin()?;
         let client = reqwest::blocking::Client::builder()
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(20))
             .redirect(reqwest::redirect::Policy::none())
             .build()
-            .map_err(|error| format!("could not prepare a secure Platform connection: {error}"))?;
+            .map_err(|error| format!("could not prepare a secure Vapor connection: {error}"))?;
+        let requested_capabilities = capability
+            .into_iter()
+            .map(PlatformSshCapability::as_api_value)
+            .collect::<Vec<_>>();
+        let duration_seconds = i64::from(duration_hours) * 60 * 60;
+
+        let authorization = client
+            .post(format!(
+                "{origin}/api/identity/v1/cli/ssh-authorization/start"
+            ))
+            .json(&StartAuthorization {
+                ssh_fingerprint: &fingerprint,
+                purpose: purpose.trim(),
+                requested_capabilities: requested_capabilities.clone(),
+                requested_duration_seconds: duration_seconds,
+            })
+            .send()
+            .map_err(|error| {
+                format!("could not start browser authorization with Vapor Identity: {error}")
+            })?;
+        if !authorization.status().is_success() {
+            return Err(format!(
+                "Vapor Identity could not start SSH request authorization ({}): {}",
+                authorization.status(),
+                limited_body(authorization)
+            ));
+        }
+        let started: StartedAuthorization = authorization.json().map_err(|error| {
+            format!("Vapor Identity returned an unreadable authorization response: {error}")
+        })?;
+
+        println!("Authorize this exact SSH request in your browser:");
+        println!("  Key: {fingerprint}");
+        println!("  Purpose: {}", purpose.trim());
+        println!("  Duration: {duration_hours} hour(s)");
+        println!("  Approve request: {}", started.verification_uri);
+        println!("  Authorization code: {}", started.user_code);
+        if let Err(error) = open_browser(&started.verification_uri) {
+            eprintln!("Could not open a browser automatically: {error}");
+        }
+
+        let token = self.wait_for_authorization(&client, &origin, &started)?;
         let request = CreateRequest {
             public_key: public_key.trim(),
             purpose: purpose.trim(),
-            requested_capabilities: capability
-                .into_iter()
-                .map(PlatformSshCapability::as_api_value)
-                .collect(),
-            requested_duration_seconds: i64::from(duration_hours) * 60 * 60,
+            requested_capabilities,
+            requested_duration_seconds: duration_seconds,
         };
         let response = client
             .post(format!("{origin}/api/ssh-access/requests"))
-            .bearer_auth(token)
+            .bearer_auth(&token)
             .json(&request)
             .send()
             .map_err(|error| {
@@ -189,31 +200,20 @@ impl LocalStore {
             })?;
         if !response.status().is_success() {
             let status = response.status();
-            let detail = response
-                .text()
-                .unwrap_or_default()
-                .trim()
-                .chars()
-                .take(300)
-                .collect::<String>();
-            let hint = if status == reqwest::StatusCode::UNAUTHORIZED {
-                " The request credential may have expired or been revoked; replace it from Identity."
-            } else {
-                ""
-            };
+            let detail = limited_body(response);
             return Err(format!(
-                "Platform rejected the SSH request ({status}): {detail}.{hint}"
+                "Platform rejected the SSH request ({status}): {detail}. Run the request again to authorize a fresh one-time request."
             ));
         }
         let created: CreatedRequest = response.json().map_err(|error| {
             format!("Platform accepted the request but returned an unreadable response: {error}")
         })?;
 
-        println!("Temporary SSH request submitted.");
+        println!("Temporary SSH request submitted for operator approval.");
         println!("  Request: {}", created.id);
         println!("  Status: {}", created.status);
         println!("  Key fingerprint: {}", created.fingerprint);
-        println!("  Local key: {}", private_key.display());
+        println!("  Local private key: {}", private_key.display());
         println!("  Review and approve: {origin}/admin/operations#ssh-access");
         println!("  Requested duration: {duration_hours} hour(s)");
         println!(
@@ -221,6 +221,59 @@ impl LocalStore {
             request.requested_capabilities.join(", ")
         );
         Ok(())
+    }
+
+    fn wait_for_authorization(
+        &self,
+        client: &reqwest::blocking::Client,
+        origin: &str,
+        started: &StartedAuthorization,
+    ) -> Result<String, String> {
+        let deadline = Instant::now()
+            + AUTHORIZATION_TIMEOUT.min(Duration::from_secs(started.expires_in_seconds));
+        let mut poll_interval = Duration::from_secs(started.poll_interval_seconds.max(1));
+        println!("Waiting for the one-time browser authorization...");
+        loop {
+            if Instant::now() >= deadline {
+                return Err("browser authorization expired; run the SSH request again".to_owned());
+            }
+            thread::sleep(poll_interval);
+            let response = client
+                .post(format!(
+                    "{origin}/api/identity/v1/cli/ssh-authorization/poll"
+                ))
+                .json(&PollAuthorization {
+                    device_code: &started.device_code,
+                })
+                .send()
+                .map_err(|error| format!("could not check the browser authorization: {error}"))?;
+            if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                continue;
+            }
+            if !response.status().is_success() {
+                return Err(format!(
+                    "Vapor Identity authorization polling failed ({}): {}",
+                    response.status(),
+                    limited_body(response)
+                ));
+            }
+            let result: PolledAuthorization = response.json().map_err(|error| {
+                format!("Vapor Identity returned an unreadable authorization status: {error}")
+            })?;
+            poll_interval = Duration::from_secs(result.poll_interval_seconds.max(1));
+            match result.status.as_str() {
+                "pending" => continue,
+                "denied" => return Err("SSH request authorization was denied".to_owned()),
+                "approved" => {
+                    return result.credential_token.ok_or_else(|| {
+                        "authorization completed without its one-time request token".to_owned()
+                    });
+                }
+                _ => {
+                    return Err("Vapor Identity returned an unknown authorization status".to_owned())
+                }
+            }
+        }
     }
 
     fn ensure_key_pair(&self) -> Result<PathBuf, String> {
@@ -249,7 +302,6 @@ impl LocalStore {
         if private.exists() || public.exists() {
             return Err("the local SSH key files are incomplete; remove them with `vapor platform ssh remove-key` and retry".to_owned());
         }
-
         let output = Command::new("ssh-keygen")
             .args([
                 "-q",
@@ -299,18 +351,48 @@ fn platform_origin() -> Result<String, String> {
         || url.query().is_some()
         || url.fragment().is_some()
     {
-        return Err(
-            "VAPOR_PLATFORM_URL must be a plain HTTPS origin (HTTP is allowed only for loopback development)".to_owned(),
-        );
+        return Err("VAPOR_PLATFORM_URL must be a plain HTTPS origin (HTTP is allowed only for loopback development)".to_owned());
     }
     Ok(url.origin().ascii_serialization())
 }
 
-fn valid_request_credential(token: &str) -> bool {
-    token.len() == 72
-        && token
-            .strip_prefix("vap_req_")
-            .is_some_and(|suffix| suffix.bytes().all(|byte| byte.is_ascii_hexdigit()))
+fn ssh_fingerprint(public_key: &Path) -> Result<String, String> {
+    let output = Command::new("ssh-keygen")
+        .args(["-l", "-E", "sha256", "-f"])
+        .arg(public_key)
+        .output()
+        .map_err(|error| format!("could not inspect the SSH public key with OpenSSH: {error}"))?;
+    if !output.status.success() {
+        return Err("OpenSSH could not calculate the SSH key fingerprint".to_owned());
+    }
+    let output = String::from_utf8_lossy(&output.stdout);
+    output
+        .split_whitespace()
+        .find(|part| part.starts_with("SHA256:"))
+        .map(str::to_owned)
+        .ok_or_else(|| "OpenSSH returned no SHA256 key fingerprint".to_owned())
+}
+
+fn open_browser(url: &str) -> Result<(), String> {
+    #[cfg(windows)]
+    let result = Command::new("rundll32.exe")
+        .args(["url.dll,FileProtocolHandler", url])
+        .spawn();
+    #[cfg(target_os = "macos")]
+    let result = Command::new("open").arg(url).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let result = Command::new("xdg-open").arg(url).spawn();
+    result.map(|_| ()).map_err(|error| error.to_string())
+}
+
+fn limited_body(response: reqwest::blocking::Response) -> String {
+    response
+        .text()
+        .unwrap_or_default()
+        .trim()
+        .chars()
+        .take(300)
+        .collect()
 }
 
 fn public_key_path(private_key: &Path) -> PathBuf {
@@ -366,8 +448,8 @@ fn set_private_directory_permissions(path: &Path) -> Result<(), String> {
         fs::set_permissions(path, fs::Permissions::from_mode(0o700))
             .map_err(|error| format!("could not protect {}: {error}", path.display()))?;
     }
-    // On Windows the directory lives below the current user's LocalAppData,
-    // whose inherited ACL is scoped to that user and the local system.
+    // On Windows this lives below LocalAppData, whose inherited ACL is scoped
+    // to the current user and the local system.
     #[cfg(windows)]
     let _ = path;
     Ok(())
@@ -380,7 +462,7 @@ fn set_private_file_permissions(path: &Path) -> Result<(), String> {
         fs::set_permissions(path, fs::Permissions::from_mode(0o600))
             .map_err(|error| format!("could not protect {}: {error}", path.display()))?;
     }
-    // The key and credential inherit the user-only LocalAppData ACL on Windows.
+    // The key inherits the user-only LocalAppData ACL on Windows.
     #[cfg(windows)]
     let _ = path;
     Ok(())

@@ -299,13 +299,6 @@ pub enum PlatformSshCommand {
         capability: Vec<PlatformSshCapability>,
     },
 
-    /// Store, inspect, or remove the request-only credential created in the Platform dashboard.
-    Credential {
-        /// Credential operation.
-        #[command(subcommand)]
-        command: PlatformSshCredentialCommand,
-    },
-
     /// Remove this machine's dedicated SSH key pair.
     RemoveKey,
 }
@@ -329,17 +322,6 @@ impl PlatformSshCapability {
             Self::HostAdmin => "host_admin",
         }
     }
-}
-
-/// Local storage operations for the request-only Platform credential.
-#[derive(Debug, Subcommand)]
-pub enum PlatformSshCredentialCommand {
-    /// Securely enter and store the one-time credential from Identity.
-    Set,
-    /// Report whether a request credential is available locally.
-    Status,
-    /// Remove the locally stored request credential.
-    Clear,
 }
 
 /// Modes accepted by the deployed Vapor Steam entrypoint.
