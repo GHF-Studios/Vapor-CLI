@@ -162,10 +162,16 @@ impl LocalStore {
             .map_err(|error| {
                 format!("could not start browser authorization with Vapor Identity: {error}")
             })?;
-        if !authorization.status().is_success() {
+        let authorization_status = authorization.status();
+        if authorization_status == reqwest::StatusCode::NOT_FOUND
+            || authorization_status == reqwest::StatusCode::METHOD_NOT_ALLOWED
+        {
+            return Err("the contacted Vapor Identity service does not expose the CLI SSH authorization flow yet; no SSH request was created. Update the Platform and Identity services, then retry".to_owned());
+        }
+        if !authorization_status.is_success() {
             return Err(format!(
                 "Vapor Identity could not start SSH request authorization ({}): {}",
-                authorization.status(),
+                authorization_status,
                 limited_body(authorization)
             ));
         }
