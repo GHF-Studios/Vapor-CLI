@@ -166,7 +166,7 @@ impl LocalStore {
         if authorization_status == reqwest::StatusCode::NOT_FOUND
             || authorization_status == reqwest::StatusCode::METHOD_NOT_ALLOWED
         {
-            return Err("the contacted Vapor Identity service does not expose the CLI SSH authorization flow yet; no SSH request was created. Update the Platform and Identity services, then retry".to_owned());
+            return Err("the contacted Vapor Identity service does not expose the CLI SSH authorization flow yet; no SSH request was created. The local key is retained for retry. Update the Platform and Identity services, then retry".to_owned());
         }
         if !authorization_status.is_success() {
             return Err(format!(
