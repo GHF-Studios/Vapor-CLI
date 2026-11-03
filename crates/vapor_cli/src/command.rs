@@ -27,6 +27,7 @@ pub(crate) use source_commands::active_source_root;
 mod content_commands;
 mod model;
 mod platform_ssh;
+pub(crate) use platform_ssh::execute as execute_platform_ssh;
 mod root_commands;
 mod source_commands;
 pub use model::*;
