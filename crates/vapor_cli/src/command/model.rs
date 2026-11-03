@@ -41,6 +41,13 @@ pub enum ShellCommand {
         command: ClientCommand,
     },
 
+    /// Request and manage temporary access to Vapor Platform services.
+    Platform {
+        /// Platform operation.
+        #[command(subcommand)]
+        command: PlatformCommand,
+    },
+
     /// Open, index, inspect, sync, or repair authored source roots.
     Source {
         /// Source operation.
@@ -263,6 +270,76 @@ pub enum ClientCommand {
         #[command(subcommand)]
         command: ClientDeployCommand,
     },
+}
+
+/// Vapor Platform operations available from the local client.
+#[derive(Debug, Subcommand)]
+pub enum PlatformCommand {
+    /// Request a temporary, explicitly approved SSH grant.
+    Ssh {
+        /// SSH access request operation.
+        #[command(subcommand)]
+        command: PlatformSshCommand,
+    },
+}
+
+/// Temporary SSH access request operations.
+#[derive(Debug, Subcommand)]
+pub enum PlatformSshCommand {
+    /// Submit this machine's dedicated SSH public key for approval.
+    Request {
+        /// Short reason shown to the operator approving the request.
+        #[arg(long, default_value = "Vapor development work from this machine")]
+        purpose: String,
+        /// Requested grant duration, from 1 to 8 hours.
+        #[arg(long, default_value_t = 8, value_parser = clap::value_parser!(u8).range(1..=8))]
+        duration_hours: u8,
+        /// Requested capability. Defaults to deployment and service control.
+        #[arg(long, value_enum, value_delimiter = ',', default_values = ["vapor-deploy", "vapor-service-control"])]
+        capability: Vec<PlatformSshCapability>,
+    },
+
+    /// Store, inspect, or remove the request-only credential created in the Platform dashboard.
+    Credential {
+        /// Credential operation.
+        #[command(subcommand)]
+        command: PlatformSshCredentialCommand,
+    },
+
+    /// Remove this machine's dedicated SSH key pair.
+    RemoveKey,
+}
+
+/// Capabilities that may be requested for a temporary SSH grant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum PlatformSshCapability {
+    /// Deploy approved Vapor services.
+    VaporDeploy,
+    /// Start, stop, or inspect approved Vapor services.
+    VaporServiceControl,
+    /// Request broad host administration. The operator must confirm separately.
+    HostAdmin,
+}
+
+impl PlatformSshCapability {
+    pub(crate) fn as_api_value(self) -> &'static str {
+        match self {
+            Self::VaporDeploy => "vapor_deploy",
+            Self::VaporServiceControl => "vapor_service_control",
+            Self::HostAdmin => "host_admin",
+        }
+    }
+}
+
+/// Local storage operations for the request-only Platform credential.
+#[derive(Debug, Subcommand)]
+pub enum PlatformSshCredentialCommand {
+    /// Securely enter and store the one-time credential from Identity.
+    Set,
+    /// Report whether a request credential is available locally.
+    Status,
+    /// Remove the locally stored request credential.
+    Clear,
 }
 
 /// Modes accepted by the deployed Vapor Steam entrypoint.

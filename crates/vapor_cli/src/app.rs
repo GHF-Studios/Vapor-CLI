@@ -4,7 +4,7 @@ use crate::{
     app_local_tools,
     command::{
         self, ClientCommand, ContentCommand, Control, DiagnosticsCommand, LaunchCommand,
-        ProviderCommand, RootCommand, ScriptCommand, ShellCommand, SourceCommand,
+        PlatformCommand, ProviderCommand, RootCommand, ScriptCommand, ShellCommand, SourceCommand,
     },
     diagnostics::{self, CaptureOptions},
     discovery::EnvironmentPaths,
@@ -318,6 +318,11 @@ enum HostSubcommand {
         #[command(subcommand)]
         command: ClientCommand,
     },
+    /// Request temporary, operator-approved Platform SSH access.
+    Platform {
+        #[command(subcommand)]
+        command: PlatformCommand,
+    },
     /// Manage authored source roots.
     Source {
         #[command(subcommand)]
@@ -410,6 +415,7 @@ impl HostSubcommand {
                 command,
             },
             HostSubcommand::Client { command } => ShellCommand::Client { command },
+            HostSubcommand::Platform { command } => ShellCommand::Platform { command },
             HostSubcommand::Source { command } => ShellCommand::Source { command },
             HostSubcommand::Installation => ShellCommand::Installation,
             HostSubcommand::Binaries => ShellCommand::Binaries,
