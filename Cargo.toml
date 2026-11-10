@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/vapor_cli", "crates/vapor_sdk_cli"]
+members = ["crates/vapor_cli", "crates/vapor_sdk_cli", "crates/vapor_cc"]
 
 [workspace.package]
 version = "0.5.0"
