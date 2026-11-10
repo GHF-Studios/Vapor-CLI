@@ -157,7 +157,7 @@ discovery may still resolve Git after this.
 
 ### `cleanup list [--json]`
 
-Print the canonical Vapor-home breakdown and individually selectable generated
+Print the active Vapor installation breakdown and individually selectable generated
 data. `--json` emits the same inventory used by Vapor Cleanup. Source, content,
 tools, configuration, and state are retained; unclassified folders are shown
 for accounting but are never offered for deletion.

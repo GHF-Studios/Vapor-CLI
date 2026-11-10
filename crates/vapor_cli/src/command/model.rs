@@ -186,7 +186,7 @@ pub enum LaunchCommand {
     Selected,
 }
 
-/// Read the canonical Vapor storage inventory or delete one listed item.
+/// Read the active Vapor installation inventory or delete one listed item.
 #[derive(Debug, Subcommand, Clone)]
 pub enum CleanupCommand {
     /// List storage areas and cleanup candidates.
