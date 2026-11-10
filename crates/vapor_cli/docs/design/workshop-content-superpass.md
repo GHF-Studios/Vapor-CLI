@@ -81,7 +81,7 @@ downloaded, installed, verified, or changed.
 
 ## Installed content layout
 
-The implemented installed-content layout is app-root owned:
+The installed-content layout is Vapor-home owned:
 
 ```text
 content/
@@ -95,7 +95,7 @@ output/content/
 ├── packages/
 └── scripts/
 
-.vapor/state/content/
+data/state/content/
 ├── index.toml
 ├── locks/
 ├── selection.toml
@@ -110,7 +110,7 @@ cache entries. `content/installed/` contains enabled artifact roots,
 during repair. `output/content/packages/` holds staged deployable artifact roots
 with resolved role manifests, and `output/content/scripts/` holds Workshop
 provider VDF previews.
-`.vapor/state/content/index.toml`, `locks/`, and `receipts/` hold generated
+`data/state/content/index.toml`, `locks/`, and `receipts/` hold generated
 dependency/conflict indexes, fingerprints, install locks, packagepack
 selection, and operation receipts.
 

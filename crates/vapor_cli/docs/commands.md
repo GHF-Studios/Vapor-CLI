@@ -4,8 +4,9 @@ Run `help` for the command list or `help <COMMAND>` for argument details.
 `vapor` without arguments opens the interactive shell. The shell owns source
 context and command authority after the app root has been prepared by
 Vapor Installer. Host-level direct facades are limited to explicit automation
-entrypoints: `source`, `metadata`, `installation`, `binaries`, `libraries`,
-`launch`, `content`, `root`, `script run`, `provider`, and `diagnostics`.
+entrypoints: `source`, `metadata`, `installation`, `cleanup`, `binaries`,
+`libraries`, `launch`, `content`, `root`, `script run`, `provider`, and
+`diagnostics`.
 
 Repeatable automation should live in
 `resources/vapor/vapor-scripts/NAME.vapor` and run through `vapor script run
@@ -21,21 +22,21 @@ small text diagnostics locally and has a future server-upload seam; it does not
 ship diagnostics through an arbitrary registry path or require Git for normal
 players.
 
-Steam launch examples:
+Vapor-owned entrypoint examples, launched from the independent Vapor home:
 
 ```text
 bin/x86_64-unknown-linux-gnu/vapor-entrypoint play --send-diagnostics
 bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe play --send-diagnostics
 ```
 
-## Client entrypoint
+## Vapor client entrypoint
 
-### `client launch [launcher|chooser|studio|shell|installer|ide] [-- ARGUMENTS...]`
+### `client launch [launcher|chooser|studio|shell|installer|ide|cleanup] [-- ARGUMENTS...]`
 
-Launch the locally deployed `vapor-entrypoint` using the host platform's
-runtime binary directory. This follows the same dispatch path as Steam without
-requiring Steam to launch it. The default mode is `launcher`; arguments after
-`--` are forwarded through the entrypoint to the selected mode:
+Launch the locally deployed `vapor-entrypoint` using Vapor home's host-platform
+runtime directory. This opens Vapor-owned interfaces without placing an
+entrypoint in the Loo-Cast Steam content mount. The default mode is `launcher`;
+arguments after `--` are forwarded to the selected mode:
 
 ```text
 vapor client launch                         # player Launcher
@@ -48,16 +49,18 @@ vapor client launch installer
 vapor client launch ide -- --workspace /path/to/rust/workspace
 ```
 
-The product chooser opens Launcher, Studio, IDE, Installer, or Shell through
-the Steam-facing entrypoint. Steam's normal launch starts the app's default
-playable composition through the Client service; the manifest's default is
-only the first-run seed. `launch default` is a compatibility spelling for the
-persistent selection. Its optional `chooser` launch option exposes the apps.
-`vapor client launch` remains a direct way to open Launcher.
+The product chooser opens Launcher, Studio, IDE, Installer, Cleanup, or Shell. Loo-Cast's
+Steam Play action runs its default composition through the separately installed
+Vapor runtime; the dedicated tools action opens the chooser. Both provide
+install guidance if Vapor is absent. The Steam payload does not bundle or update
+Vapor. The manifest's default composition seeds first-run selection.
 
 The IDE is a developer-facing Rust workspace editor. It uses the shared Client
 service for workspace access and managed checks; it does not replace the
 in-game Rhai Script Workbench.
+
+`client launch cleanup` opens Vapor Cleanup directly. The tool picker also
+offers it under Setup & Advanced Tools.
 
 The installed CLI resolves its app instance from its own location. When
 running a source-built CLI from the managed build cache, set `VAPOR_HOME` to the
@@ -126,10 +129,10 @@ diagnostics transport. The current transport boundary is reserved for a future
 Vapor HTTP server and intentionally reports not-configured rather than falling
 back to Git or a user-managed registry checkout.
 
-Captured runs are stored under:
+Captured runs are stored under the Vapor home:
 
 ```text
-<app-root>/.vapor/diagnostics/
+data/diagnostics/
   runs/YYYY-MM-DD/<unix_timestamp>-<platform>-<short-random>/
     metadata.toml
     vapor.log
@@ -145,7 +148,7 @@ commands.
 
 ### `provider git link PATH`
 
-Persist an explicit Git executable path under app-local state. Vapor validates
+Persist an explicit Git executable path under Vapor-home state. Vapor validates
 the executable with `git --version` before saving it.
 
 ### `provider git clear`
@@ -157,7 +160,7 @@ discovery may still resolve Git after this.
 
 ### `cleanup list [--json]`
 
-Print the active Vapor installation breakdown and individually selectable generated
+Print the canonical Vapor-home breakdown and individually selectable generated
 data. `--json` emits the same inventory used by Vapor Cleanup. Source, content,
 tools, configuration, and state are retained; unclassified folders are shown
 for accounting but are never offered for deletion.
@@ -171,23 +174,30 @@ files. It prints the exact command and typed phrase required to remove it.
 
 Delete one listed item only when the current byte count still matches the size
 reviewed and `--confirm` exactly matches `DELETE ID`. Vapor rescans immediately
-before deletion and never accepts an arbitrary filesystem path. Build output
+before removal and never accepts an arbitrary filesystem path. Build output
 warns that the next build must recompile; Cargo caches warn that they must be
 fetched again.
 
+```text
+vapor cleanup list
+vapor cleanup list --json
+vapor cleanup inspect sources/Vapor-Client/target
+vapor cleanup remove sources/Vapor-Client/target --expected-bytes 123456 --confirm "DELETE sources/Vapor-Client/target"
+```
+
 ### `installation`
 
-Print the Steam installation/app root discovered from the running Vapor
-executable.
+Print the standalone Vapor home discovered from the running executable or
+`VAPOR_HOME` environment.
 
 ### `binaries`
 
-Print the app-local binary directory that contains the running Vapor executable.
+Print the Vapor-home binary directory that contains the running executable.
 In release-mode entrypoint launches this is usually `bin/<target>/`.
 
 ### `libraries`
 
-Print the app-local `lib` directory when it exists.
+Print the Vapor-home `lib` directory when it exists.
 
 ## Derived context
 
@@ -205,30 +215,9 @@ resolved model and reject unmet prerequisites before acting.
 
 ## Setup
 
-Normal closed-alpha installation is app-root-tool-owned, not a manual Shell
-setup flow. Use the installed app-root tools:
-
-```text
-rust-script --force <app-root>/resources/vapor/tools/production/app_setup/status.rs
-rust-script --force <app-root>/resources/vapor/tools/production/app_setup/setup_player.rs
-rust-script --force <app-root>/resources/vapor/tools/production/app_setup/setup_development.rs
-rust-script --force <app-root>/resources/vapor/tools/production/app_setup/teardown_development.rs
-rust-script --force <app-root>/resources/vapor/tools/production/app_setup/teardown_player.rs
-```
-
-`vapor-installer` is the compiled Steam/app-root launcher for setup flows; it
-delegates to the same app-root tool implementation.
-
-`setup_player.rs` prepares player mode: SteamCMD and generated disposable
-app-root state. Git is linked by developers through `provider git ...`, not
-installed for normal players.
-`setup_development.rs` upgrades that app root with Rust/Cargo and cross-build
-tooling for developers.
-
-`teardown_development.rs` downgrades developer mode back to player mode without
-removing player-mode tooling. `teardown_player.rs` removes script-managed
-mutable app-root state; Steam's uninstall feature removes depot-owned
-Shell/docs/installer files.
+Vapor installation and role changes are owned by the standalone Vapor
+Installer. See [installation and local setup](setup.md). No setup command
+installs Vapor into a Steam game directory, and Steam does not remove Vapor.
 
 ## Cargo workflows
 
@@ -239,16 +228,15 @@ Run the selected Cargo operation through app-local Rust/Cargo.
 root. `[workspace]` sources expose their root Cargo workspace. `[root]` sources
 expose direct submodules that declare `[workspace]` and contain `Cargo.toml`.
 
-Artifacts go to `output/dev/<project>` inside the app root instead of source
-trees. Development tooling should be installed through the app-root
-`resources/vapor/tools/production/app_setup/setup_development.rs` tool.
+Artifacts go to `output/dev/<project>` inside Vapor home instead of source
+trees. Development tooling is provisioned by the standalone Vapor Installer.
 Workspaces that declare `[workspace].binaries` in `Workspace.vapor.toml` can promote
 those outputs into `bin/<target>/` through `root build`.
 
 ### `clean`
 
 Ask the shared Vapor Client service to remove the active workspace's managed
-development build outputs. This clears its app-local `output/dev/<project>`
+development build outputs. This clears its Vapor-home `output/dev/<project>`
 and user-data development target roots while preserving release outputs,
 documentation, installed content, and source files.
 
@@ -382,87 +370,50 @@ changing them. Real IDE repair must be typed manually in the interactive shell;
 scripts may run `ide status` and `ide repair --dry-run`, but not real
 `ide repair`.
 
-## Root application/depot workflows
+## Application and depot workflows
 
 ### `root build [--release] [--target TARGET]... [--release-targets] [--host-only]`
 
-Build installable Cargo workspaces into app-root build outputs under
-`output/dev/<project>/`, or `output/release/<project>/` with `--release`.
-Installable means a workspace declares at least one
-`[workspace].binaries` entry. When `[root.runtime].targets` is declared,
-omitting target flags builds that full runtime matrix by default. Repeat
-`--target` to build an explicit custom subset, such as only Windows GNU/LLVM.
-`--release` uses Cargo's optimized profile and does not promote outputs.
-
-`root build` does not refresh installed app binaries, docs, Vapor scripts, or
-launch scripts. Use `root deploy` to promote already-built app outputs into the
-local Steam/app root.
-
-`--release-targets` is an explicit spelling of the manifest target-matrix
-default; it does not select Cargo's release profile. Use `--host-only` for a
-local smoke pass that builds only Cargo's host target. Do not combine `--target`,
-`--release-targets`, and `--host-only`.
+Build installable Cargo workspaces into Vapor-home build outputs under
+`output/dev/<project>/`, or `output/release/<project>/` with `--release`. This
+build does not publish anything and does not write into a Steam product mount.
 
 ### `root deploy [--skip-docs] [--target TARGET]... [--release-targets] [--host-only]`
 
-Promote already-built application binaries from `[workspace].binaries` into the
-local Steam installation/app root under `bin/<target>/`, then refresh installed
-docs, Vapor scripts, setup tools, and platform launch scripts. This is a local
-app-root deploy/sync operation; it does not upload to Steam.
-
-When `[root.runtime].targets` is declared, omitting target flags deploys that
-full runtime matrix by default. Repeat `--target` to deploy an explicit custom
-subset. Use `--host-only` for a local host-only deploy. Use `--skip-docs` for a
-faster binary/script refresh.
+Promote already-built application binaries and Vapor-owned support assets into
+the local Vapor home. This is a local install/deploy operation, not a Steam
+upload. It is restricted to the Vapor standalone source root; use
+`content deploy` for authored Engine/Game products. Rust toolchain requirements
+apply because it promotes Cargo outputs.
 
 ### `root package [--target TARGET]... [--release-targets] [--host-only]`
 
-Build and refresh the local Steam app root using Cargo's optimized release
-profile, assemble the clean allowlisted
-split-depot app payload, and smoke-check the staged package without invoking
-SteamCMD. The default root payload is runtime-only: the common depot carries
-`App.vapor.toml`, `docs/`, app scripts, and packaged examples; platform depots
-carry selected `bin/<target>/` application binaries, including
-`vapor-entrypoint[.exe]`, and target-matching `bin/vapor-launch.*` scripts.
+Build installable Cargo outputs when the selected root owns them, then stage
+its declared release payloads. A Vapor source with `Vapor-Standalone.toml`
+stages standalone Vapor bundles under Vapor home and does not need Steam policy.
+A source with Steam depot policy stages only those allowlisted depots; it does
+not sync Vapor-owned assets into that product source. A source may declare both
+payload types. Loo-Cast's `steam-mount/` is a depot-only source; Vapor Client's
+own source stages the independently distributed runtime.
 
-When `[root.runtime].targets` is declared, omitting target flags stages that
-full matrix by default. Repeat `--target` to build and stage a deliberate
-custom subset. Use `--host-only` for a local host-only package.
+### `root publish [--account ACCOUNT] [--branch BRANCH] [--target TARGET]... [--release-targets] [--host-only] [--dry-run] [--yes]`
 
-### `root publish [--account ACCOUNT] [--branch BRANCH] [--dry-run] [--yes]`
+Stage the selected application source root's manifest-declared content, produce
+a review fingerprint and SteamPipe app/depot VDFs, and optionally upload the
+reviewed payload. This operation does not build Vapor binaries. The selected
+application must own its Steam app/depot policy; Vapor Client does not.
 
-Validate, build, promote binaries, build docs, stage the clean split-depot app
-payload, smoke-check it, generate SteamPipe app/depot VDFs, and optionally
-upload it. The default upload payload is runtime-only; Loo-Cast and other content
-artifacts are published through `content publish`, not through the app depot.
-
-Real publication always uses the complete `[root.runtime].targets` matrix and
-runs validation/build/promotion before staging. Narrow target selection,
-`--host-only`, and `--skip-build` are dry-run/local-package escape hatches only;
-they are rejected for real uploads. The depot smoke check rejects staged
-platform depots when their matching `bin/vapor-launch.*` script,
-`bin/<target>/vapor-entrypoint[.exe]`, `bin/<target>/vapor[.exe]`,
-`bin/<target>/vapor-installer[.exe]`, `bin/<target>/vapor-gui[.exe]`,
-`bin/<target>/vapor-launcher[.exe]`, `bin/<target>/vapor-studio[.exe]`,
-`bin/<target>/vapor-ide[.exe]`, `bin/<target>/vapor-installer-gui[.exe]`,
-`bin/<target>/vapor-ide-host[.exe]`, or required Windows runtime DLL payload
-is missing. Launchable binaries are declared by each direct root workspace's
-`[workspace].binaries` list and promoted into the app root before staging.
-Real publication preflight requires app-local Rust/Cargo, cross-build tooling,
-and SteamCMD. Explicit Git-backed operations use the linked developer Git
-provider instead of app-local Git.
-
-`--dry-run` writes the staged payload and preview VDF without requiring
-SteamCMD or performing an upload. A real upload requires `--account ACCOUNT`
-and `--yes`, and must be typed manually in the interactive shell. The branch
-defaults to `[root.steam].development-branch` and must be non-default.
-
+Use `--dry-run` to review the stage and generated VDFs without uploading. A real
+upload requires `--account` and `--yes`; it re-stages the product source and
+rejects the upload if the payload differs from the reviewed fingerprint. Use
+the full product target matrix for release publication. Vapor runtime and all
+Vapor-owned mutable state remain under Vapor home.
 ## Content workflows
 
 ### `content status`
 
 Report the nearest typed content node under the source cursor and print the
-app-root content layout used for installed artifact roots, cache, and generated
+Vapor-home content layout used for installed artifact roots, cache, and generated
 state. Packagepacks, Enginepacks, Gamepacks, and Modpacks are content
 artifacts, not application depot roots.
 
@@ -485,7 +436,7 @@ conflicts, and Workshop publication intent through the shared service. Omit
 
 Build the active content workspace through app-local Cargo. This uses the same
 development tooling preflight as other Cargo workflows and writes build output
-under the app root. When `[workspace.runtime].targets` is declared, omitting
+under Vapor home. When `[workspace.runtime].targets` is declared, omitting
 target flags builds that full matrix by default. Use `--target` to build an
 explicit custom subset such as only `x86_64-pc-windows-gnullvm`. Use
 `--host-only` for a local host build.

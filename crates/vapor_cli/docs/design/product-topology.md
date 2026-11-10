@@ -1,6 +1,13 @@
 # Vapor product topology
 
-Status: **canonical design checkpoint; implemented baseline plus planned policy**
+Status: **historical checkpoint; superseded by the standalone Vapor and
+content-only Steam boundary**
+
+The app-root/Steam-installed topology described below is no longer current.
+Vapor is independently installed under Vapor home. Steam carries only each
+product's manifest-declared content, split by ABI where binaries differ. Use
+`setup.md`, `discovery.md`, and `steam-development.md` for current ownership and
+release behavior. This file remains only as background for earlier decisions.
 
 This document records the product model Vapor Shell is converging on. It is the
 source of truth for vocabulary, containment, authority, and workflow intent. It
@@ -458,7 +465,7 @@ to the human.
 ## Opening and targeting source
 
 The global CLI is usable regardless of the terminal's current directory because
-the executable discovers the Steam installation/app root from itself first.
+the executable discovers the standalone Vapor home from itself or `VAPOR_HOME`.
 Invoking `vapor` opens the interactive Vapor Shell even when no source is
 active. A closed shell may inspect the app, manage the source index, report
 metadata, and manage app-local setup.
@@ -470,9 +477,9 @@ Source work starts only after explicitly opening an external source:
 - `source close` returns to the app-only shell state;
 - `source list|add|remove` manages the app-local source index.
 
-The source index belongs to the Steam installation/app root because it is tool
-state. Source working trees remain authored Git repositories outside the app
-root. Opening a path inside a nested project, content item, or shell checkout
+The source index belongs to the standalone Vapor home because it is tool state.
+Source working trees remain authored Git repositories outside Vapor home.
+Opening a path inside a nested project, content item, or shell checkout
 escalates to the highest containing valid Vapor source root.
 
 Once a source is open, Vapor owns the session cursor. Navigation commands may

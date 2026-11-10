@@ -9,7 +9,7 @@
 //!
 //! Installation paths remain available through [`ShellState::active_paths`] for
 //! explicit tool execution and diagnostics. They are not valid navigation
-//! targets because authored source must remain outside the app root.
+//! targets because authored source must remain outside the Vapor home.
 
 use crate::{
     cargo_metadata::{CargoIndex, CargoWorkspace},
@@ -166,7 +166,7 @@ impl ShellState {
         self.cargo = CargoIndex::NotPresent;
     }
 
-    /// Steam installation/app root for this session.
+    /// Standalone Vapor home for this session.
     pub fn installation(&self) -> &InstallationPaths {
         &self.installation
     }

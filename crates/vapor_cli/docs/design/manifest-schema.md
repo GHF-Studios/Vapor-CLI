@@ -51,10 +51,10 @@ the Steam installation/app root and not a Cargo workspace. Its authority file is
 schema = 1
 
 [root]
-name = "vapor-root"
+name = "loo-cast"
 organization = "ghf-studios"
 version = "0.5.0"
-repository = "https://github.com/GHF-Studios/Vapor-Client"
+repository = "https://github.com/GHF-Studios/Loo-Cast"
 
 [root.steam]
 app-id = 2122620
@@ -73,15 +73,9 @@ required = true
 id = 2122622
 
 [[root.steam.depots.linux.include]]
-root = "source"
-from = "resources/vapor/shell-scripts/linux/vapor-launch.sh"
-to = "bin/vapor-launch.sh"
-required = true
-
-[[root.steam.depots.linux.include]]
-root = "installation"
-from = "bin/x86_64-unknown-linux-gnu"
-to = "bin/x86_64-unknown-linux-gnu"
+root = "product"
+from = "content/installed/ghf-studios/loo-cast/spacetime-engine/lib/x86_64-unknown-linux-gnu"
+to = "content/installed/ghf-studios/loo-cast/spacetime-engine/lib/x86_64-unknown-linux-gnu"
 target = "x86_64-unknown-linux-gnu"
 required = true
 
@@ -89,22 +83,9 @@ required = true
 id = 2122623
 
 [[root.steam.depots.windows.include]]
-root = "source"
-from = "resources/vapor/shell-scripts/windows/vapor-launch.cmd"
-to = "bin/vapor-launch.cmd"
-required = true
-
-[[root.steam.depots.windows.include]]
-root = "installation"
-from = "bin/x86_64-pc-windows-gnullvm"
-to = "bin/x86_64-pc-windows-gnullvm"
-target = "x86_64-pc-windows-gnullvm"
-required = true
-
-[[root.steam.depots.windows.include]]
-root = "installation"
-from = "bin/x86_64-pc-windows-gnullvm/libunwind.dll"
-to = "bin/x86_64-pc-windows-gnullvm/libunwind.dll"
+root = "product"
+from = "content/installed/ghf-studios/loo-cast/spacetime-engine/lib/x86_64-pc-windows-gnullvm"
+to = "content/installed/ghf-studios/loo-cast/spacetime-engine/lib/x86_64-pc-windows-gnullvm"
 target = "x86_64-pc-windows-gnullvm"
 required = true
 
@@ -113,13 +94,6 @@ targets = [
     "x86_64-unknown-linux-gnu",
     "x86_64-pc-windows-gnullvm",
 ]
-
-[[root.content]]
-id = "ghf-studios/loo-cast/loo-cast-packagepack"
-kind = "packagepack"
-app-id = 2122620
-workshop-id = "3762162548"
-default-launch = "default"
 ```
 
 Direct Git submodules define its application/depot workspace membership. Each

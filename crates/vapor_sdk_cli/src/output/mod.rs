@@ -2,15 +2,11 @@
 
 mod common;
 mod environment;
-mod root;
 mod steam;
 mod stub;
 mod toolchain;
 mod workspace;
 
-use vapor_sdk_core::root::package::root_package;
-use vapor_sdk_core::root::publish::root_publish;
-use vapor_sdk_core::root::types::RootCommand;
 use vapor_sdk_core::steam::process::steam_login;
 use vapor_sdk_core::steam::status::steam_status;
 use vapor_sdk_core::steam::types::SteamCommand;
@@ -51,12 +47,6 @@ pub(crate) fn print_command(
         }
         SdkCommand::Workspace(WorkspaceCommand::Deploy) => {
             workspace::print_deploy(&globals, &spec, workspace_deploy(&globals)?)
-        }
-        SdkCommand::Root(RootCommand::Package(request)) => {
-            root::print_package(&globals, &spec, root_package(request)?)
-        }
-        SdkCommand::Root(RootCommand::Publish(request)) => {
-            root::print_publish(&globals, &spec, root_publish(request)?)
         }
         SdkCommand::Steam(SteamCommand::Status(request)) => {
             steam::print_status(&globals, &spec, steam_status(request)?)

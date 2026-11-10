@@ -19,7 +19,6 @@ use clap_repl::{ClapEditor, ReadCommandOutput};
 use std::{
     ffi::OsString,
     io::{self, Write},
-    path::Path,
 };
 
 enum StartupMode {
@@ -126,7 +125,7 @@ fn print_startup_overview(state: &ShellState) {
     println!("Vapor Shell");
     println!();
     println!("Status");
-    println!("  App root: {}", installation.root().display());
+    println!("  Vapor home: {}", installation.root().display());
     let runtime_tools_ready = tool_status.steamcmd().installed();
     println!(
         "  Runtime tools: {}",
@@ -151,12 +150,7 @@ fn print_startup_overview(state: &ShellState) {
             println!("    log: {}", log.display());
         }
         println!(
-            "    command: rust-script --force {}",
-            display_command_argument(
-                &installation
-                    .root()
-                    .join("resources/vapor/tools/production/app_setup/setup_player.rs")
-            )
+            "    next: open the standalone Vapor Installer to repair Vapor home"
         );
     }
     match state.source() {
@@ -170,25 +164,11 @@ fn print_startup_overview(state: &ShellState) {
     println!();
     println!("Next");
     if installer_failure.is_some() {
-        println!("  reinstall the Steam app, or run the setup script shown above");
+        println!("  repair Vapor home with the standalone Vapor Installer");
     } else if !runtime_tools_ready {
-        println!(
-            "  rust-script --force {}",
-            display_command_argument(
-                &installation
-                    .root()
-                    .join("resources/vapor/tools/production/app_setup/setup_player.rs")
-            )
-        );
+        println!("  install the Player runtime with the standalone Vapor Installer");
     } else if !tool_status.complete() && state.source().is_some() {
-        println!(
-            "  rust-script --force {}",
-            display_command_argument(
-                &installation
-                    .root()
-                    .join("resources/vapor/tools/production/app_setup/setup_development.rs")
-            )
-        );
+        println!("  select the Developer role in the standalone Vapor Installer");
     } else if state.source().is_none() {
         println!("  launch default");
     } else {
@@ -198,39 +178,6 @@ fn print_startup_overview(state: &ShellState) {
     println!();
     println!("Use `help` for commands. Use `exit` to close Vapor.");
     println!();
-}
-
-fn display_command_argument(path: &Path) -> String {
-    shell_quote(&path.display().to_string())
-}
-
-#[cfg(windows)]
-fn shell_quote(value: &str) -> String {
-    if value.is_empty()
-        || value.bytes().any(|byte| {
-            matches!(
-                byte,
-                b' ' | b'\t' | b'\r' | b'\n' | b'(' | b')' | b'&' | b'|' | b'<' | b'>' | b'^'
-            )
-        })
-    {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_owned()
-    }
-}
-
-#[cfg(not(windows))]
-fn shell_quote(value: &str) -> String {
-    let safe = !value.is_empty()
-        && value
-            .bytes()
-            .all(|byte| matches!(byte, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_' | b'@' | b'%' | b'+' | b'=' | b':' | b',' | b'.' | b'/' | b'-'));
-    if safe {
-        value.to_owned()
-    } else {
-        format!("'{}'", value.replace('\'', "'\\''"))
-    }
 }
 
 fn parse_startup() -> Result<Startup, String> {
@@ -293,7 +240,7 @@ fn shell_only_error() -> String {
     name = "vapor",
     bin_name = "vapor",
     about = "Open Vapor Shell or run a launch/source command",
-    after_help = "Run `vapor` with no command to enter the interactive Shell.\nUse `vapor launch --current-workspace` from inside a workspace to run its default source configuration.\nUse `vapor --startup-script NAME` to run an app/source script before the prompt.\nUse app-root tools under `resources/vapor/tools/production/app_setup` for player/developer setup.\nUse source commands to choose the project you want Vapor to work with."
+    after_help = "Run `vapor` with no command to enter the interactive Shell.\nUse `vapor launch --current-workspace` from inside a workspace to run its default source configuration.\nUse `vapor --startup-script NAME` to run an app/source script before the prompt.\nUse the standalone Vapor Installer to choose Player or Developer setup.\nUse source commands to choose the project you want Vapor to work with."
 )]
 struct HostCommand {
     /// Capture this run for explicit private-test diagnostics handling.
@@ -328,7 +275,7 @@ enum HostSubcommand {
         #[command(subcommand)]
         command: SourceCommand,
     },
-    /// Print the Steam installation/app root.
+    /// Print the standalone Vapor home.
     Installation,
     /// Inspect or remove selected generated data in the canonical Vapor home.
     Cleanup {

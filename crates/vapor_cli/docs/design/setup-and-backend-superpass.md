@@ -4,8 +4,9 @@ Status: **superseded checkpoint**
 
 This checkpoint is historical. The current product direction moves
 installation, uninstallation, runtime bootstrap, and development-environment
-tooling into the `Vapor-Installer` project. Vapor Shell no longer exposes the
-`setup` command group or retired setup staging flags.
+tooling into the standalone `Vapor-Installer` project under Vapor home. Steam
+installs only game content, never the runtime or tooling. Vapor Shell no longer
+exposes the `setup` command group or retired setup staging flags.
 
 This checkpoint records the owner decisions behind the setup/tooling rework. It
 extends `product-topology.md`; it does not replace the root/source/content

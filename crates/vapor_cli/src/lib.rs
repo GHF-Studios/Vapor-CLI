@@ -9,8 +9,8 @@ mod diagnostics;
 mod git_provider;
 mod ide;
 mod launch_session;
-mod storage_report;
 mod prompt;
+mod storage_report;
 
 pub mod app_local_tools;
 pub mod cargo_metadata;

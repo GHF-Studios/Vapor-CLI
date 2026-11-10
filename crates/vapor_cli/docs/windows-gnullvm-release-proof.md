@@ -1,5 +1,9 @@
 # Windows GNU/LLVM release proof
 
+> Historical proof from the Steam-root deployment model. Its paths and
+> installation assumptions are superseded by standalone Vapor home and the
+> content-only ABI-specific Steam depots.
+
 This checklist proves the Windows side of the release target matrix without
 publishing Steam depot or Workshop changes. Steam's default launch starts the
 default playable composition through the native entrypoint. The optional

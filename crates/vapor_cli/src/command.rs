@@ -3,8 +3,8 @@
 //! Static finite argument domains use Clap enums. Dynamic domains, such as
 //! discovered Cargo workspace names, are validated by Vapor metadata.
 //!
-//! Installation commands report app-root resource paths; they never move
-//! the source cursor into the Steam application directory.
+//! Installation commands report Vapor-home resource paths; they never move
+//! the source cursor into an external Steam product directory.
 
 use crate::{
     app_local_tools::AppToolRequirement,

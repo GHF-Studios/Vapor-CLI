@@ -58,8 +58,8 @@ pub(crate) fn execute(command: CleanupCommand, home: &Path) -> Result<(), String
 }
 
 fn print_inventory(inventory: &storage::StorageInventory) {
-    println!("Vapor Cleanup · installation storage");
-    println!("Root: {}", inventory.home.display());
+    println!("Vapor Cleanup · canonical home");
+    println!("Home: {}", inventory.home.display());
     println!("Total: {}", format_bytes(inventory.total_bytes));
     if inventory.scan_incomplete {
         println!("WARNING: Some files could not be measured; shown totals may be low.");
