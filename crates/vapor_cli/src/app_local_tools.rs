@@ -154,8 +154,8 @@ pub fn require_status(
 }
 
 fn inspect_root(root: &Path) -> AppToolStatus {
-    let rustup = root.join("rustup/bin").join(executable("rustup"));
-    let toolchains = root.join("rustup-home/toolchains");
+    let rustup = root.join("tools/rustup/bin").join(executable("rustup"));
+    let toolchains = root.join("tools/rustup/home/toolchains");
     let (rust_bin, rust_missing) = inspect_rust(&toolchains, Some(root));
     let mut missing = rust_missing;
     if !is_executable(&rustup) {
@@ -300,8 +300,8 @@ fn is_healthy_executable(path: &Path, root: &Path) -> bool {
         && Command::new(path)
             .arg("--version")
             .env("VAPOR_HOME", root)
-            .env("CARGO_HOME", root.join("cargo-home"))
-            .env("RUSTUP_HOME", root.join("rustup-home"))
+            .env("CARGO_HOME", root.join("tools/cargo/home"))
+            .env("RUSTUP_HOME", root.join("tools/rustup/home"))
             .output()
             .is_ok_and(|output| output.status.success())
 }
