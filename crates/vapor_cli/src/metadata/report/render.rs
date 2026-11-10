@@ -198,7 +198,7 @@ fn next_command(report: &MetadataReport) -> &'static str {
         return "source open /path/to/source";
     }
     if !report.app_local_tools.complete {
-        return "rust-script --force <app-root>/resources/vapor/tools/production/app_setup/setup_development.rs";
+        return "open the standalone Vapor Installer and select the Developer role";
     }
     if matches!(report.manifests.workspace.status, ResourceState::Invalid) {
         return "source status";

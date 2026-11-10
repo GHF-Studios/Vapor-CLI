@@ -1,53 +1,48 @@
 # Vapor installation and local setup
 
-Normal closed-alpha testers should not run manual setup commands before first
-launch. The Steam app starts through the platform entrypoint, the launch script
-calls the shipped `vapor-installer` shim, and that shim delegates to the
-app-root tool layer.
+Vapor is an independently installed application. Its installer owns the
+Vapor home, update, repair, and uninstall lifecycle. Steam does not install or
+remove Vapor.
 
-Canonical tools live in the installed app root:
+## Ownership boundaries
 
-```text
-<app-root>/resources/vapor/tools/
-```
+- Vapor home owns Vapor executables, tools, source checkouts, caches, logs,
+  configuration, generated output, and writable state.
+- The Loo-Cast Steam app owns only its composition manifest and the three
+  first-party content products: Spacetime Engine, Loo-Cast game, and Loo-Cast
+  Packagepack. The ABI-specific product files are delivered from matching
+  Linux and Windows depots.
+- Mad Max remains a player-owned Steam installation. Vapor manages modding
+  tools and packages around that local game; it does not distribute the base
+  game.
 
-The source copy under `Vapor-Root/resources/vapor/tools/` is payload source for
-the next app/root local publish or global publish. Runtime workflows should call
-the app-root copy.
+Installing or removing either Steam game must not move, update, or uninstall
+Vapor home. Installing or removing Vapor must not modify either game's owned
+content.
 
-## App-root operations
+## Installation roles
 
-```text
-rust-script --force <app-root>/resources/vapor/tools/production/app_setup/status.rs
-rust-script --force <app-root>/resources/vapor/tools/production/app_setup/setup_player.rs
-rust-script --force <app-root>/resources/vapor/tools/production/app_setup/setup_development.rs
-rust-script --force <app-root>/resources/vapor/tools/production/app_setup/teardown_development.rs
-rust-script --force <app-root>/resources/vapor/tools/production/app_setup/teardown_player.rs
-```
+Vapor has two local roles:
 
-When run from `<app-root>/resources/vapor/tools`, setup scripts infer the app
-root from their own deployed path. The resolver also checks `LOO_CAST_APP_ROOT`,
-the app-root anchor file, the installed binary layout, common Steam library
-locations, `libraryfolders.vdf`, and `appmanifest_2122620.acf`.
+- **Player** installs the runtime needed to discover and launch available
+  content.
+- **Developer** installs the runtime plus the required authoring tools,
+  cross-target Rust toolchains, cross-linkers, and diagnostics tooling.
 
-## SuperWorkspace bootstrap
+Developer setup is complete by definition; the user cannot choose a partial
+Developer toolset. Ecosystem-level developer permissions are separate server
+authorization and do not change the local installation role.
 
-Create and patch a SuperWorkspace before opening RustRover:
+## Product mounting
 
-```text
-rust-script --force <app-root>/resources/vapor/tools/development/superworkspace/create.rs --path /path/to/SuperWorkspace
-rust-script --force <app-root>/resources/vapor/tools/development/source_setup/clone.rs --super-workspace /path/to/SuperWorkspace --all
-rust-script --force <app-root>/resources/vapor/tools/development/ide_setup/patch_rustrover.rs --super-workspace /path/to/SuperWorkspace
-```
+Vapor treats Steam-installed products as external content mounts. The current
+Loo-Cast product context is supplied with `VAPOR_PRODUCT_ROOT` and must point
+to a directory containing `App.vapor.toml`. Product discovery and any direct
+Steam launch-option handoff into Vapor remain separate integration work; no
+Vapor binary or launch adapter may be added to the Loo-Cast Steam depots to
+implement them.
 
-`clone.rs` clones sources into `SuperWorkspace/sources/`.
-
-## Installer shim
-
-`vapor-installer` remains an app binary wrapper for launch scripts and old
-command habits. It does not make the SuperWorkspace own tools.
-
-The app root is disposable. Script-managed state under the app root is
-recreateable tooling, caches, logs, receipts, and launch install state.
-Authoritative user progress or account data must live in OS-appropriate user
-data directories, not primarily in the Steam application directory.
+Use Vapor's standalone Installer to select or repair the installation role.
+Use Vapor Launcher to choose an installed product composition. Do not run
+legacy Steam-root setup scripts or place Vapor-owned files in a game's install
+directory.

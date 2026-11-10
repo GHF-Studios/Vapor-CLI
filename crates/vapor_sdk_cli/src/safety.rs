@@ -5,7 +5,6 @@ use std::fmt;
 
 use dialoguer::Confirm;
 use owo_colors::{OwoColorize, Stream::Stdout};
-use vapor_sdk_core::root::types::RootCommand;
 use vapor_sdk_core::{
     CommandSpec, GlobalOptions, LeafCommand, PackCommand, PackagepackCommand, RepairCommand,
     SdkCommand, SourceAuthoringCommand, ToolchainCommand, WorkspaceCommand,
@@ -162,12 +161,6 @@ impl SafetyPolicy {
                 strict: false,
                 keep_unused_versions: false,
                 confirm: true,
-            },
-            SdkCommand::Root(RootCommand::Publish(request)) => Self {
-                force: false,
-                strict: false,
-                keep_unused_versions: false,
-                confirm: !request.plan,
             },
             SdkCommand::Packagepack(PackagepackCommand::Compose(_))
             | SdkCommand::Pack {

@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const BOOTSTRAP_FAILURE: &str = ".vapor/state/installer/bootstrap-failure.txt";
+const BOOTSTRAP_FAILURE: &str = "data/state/installer/bootstrap-failure.txt";
 
 pub(crate) struct InstallerBootstrapFailure {
     message: String,

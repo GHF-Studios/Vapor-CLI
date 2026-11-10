@@ -494,20 +494,17 @@ pub enum RootCommand {
         /// Existing non-default beta branch; defaults to the distribution manifest.
         #[arg(long)]
         branch: Option<String>,
-        /// Rust target triple for dry-run/custom root application binaries. May be repeated.
+        /// ABI target triple whose manifest-declared files are staged. May be repeated.
         #[arg(long, value_name = "TARGET")]
         target: Vec<String>,
-        /// Build and stage the manifest runtime target matrix. This is the default when declared.
+        /// Stage every target declared by the product manifest.
         #[arg(long)]
         release_targets: bool,
-        /// Build and stage only the host target for a dry-run/local smoke pass.
+        /// Stage only the host target for a local package preview.
         #[arg(long)]
         host_only: bool,
-        /// Use already-promoted app binaries for dry-run previews only.
-        #[arg(long)]
-        skip_build: bool,
-        /// Internal Steam build description.
-        #[arg(long, default_value = "Vapor development build")]
+        /// Steam release description.
+        #[arg(long, default_value = "Loo-Cast content release")]
         description: String,
         /// Generate staging and a preview VDF without uploading.
         #[arg(long)]

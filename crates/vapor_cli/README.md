@@ -1,30 +1,32 @@
 # Vapor Shell
 
-Vapor Shell is the interactive boundary between the Steam-installed app root
-and an external source root containing critical authored source.
+Vapor Shell is the interactive boundary between the independently installed
+Vapor home, a Steam-owned product root, and an external source root containing
+critical authored source.
 
 At runtime, the shell works with two active filesystem roots:
 
 ```text
-Steam installation / app root         Active source root (critical)
-├── App.vapor.toml                    ├── Workspace.vapor.toml or App-Source.vapor.toml
-├── bin/vapor-launch.*                ├── Cargo.toml      (workspace roots)
-├── bin/<target>/vapor-entrypoint[.exe]
-├── bin/<target>/vapor[.exe]          ├── content directories with role manifests
-├── resources/vapor/vapor-scripts/    └── authored source
-├── .vapor/logs, state, cache, ...
-├── tools/steamcmd
-└── content / installed Workshop artifacts
+Vapor home                     Product root             Active source root
+├── Vapor-Home.toml            ├── App.vapor.toml        ├── Workspace.vapor.toml
+├── bin/<target>/runtime       ├── content shipped by    │   or App-Source.vapor.toml
+├── config/                    │   the product owner     ├── Cargo.toml
+├── content/                   └── local product files   └── authored source
+├── data/state/
+├── docs/, examples/, resources/
+├── sources/
+├── cache/build/<target>/
+└── tools/{cargo,rustup}/
 ```
 
-The roots must not overlap. Vapor discovers the installation from the running
-executable. Source roots are opened explicitly by path or app-local registered
-name, and the last active source is remembered under the app root. Interactive
+The roots must not overlap. Vapor discovers its installation from the running
+executable or `VAPOR_HOME`; selected product context is supplied through
+`VAPOR_PRODUCT_ROOT`. Source roots are opened explicitly by path or remembered
+name, and the last active source is stored under Vapor home. Interactive
 filesystem navigation is confined to the opened source root.
 
-The product model also distinguishes a third concept: a Vapor application
-source root such as Vapor-Root. That is source for building the Steam app/depot,
-not the installed Steam directory itself.
+The product model also distinguishes Vapor application source such as this
+repository. It is not the installed Vapor home or the installed product root.
 
 ## Documentation
 
@@ -40,9 +42,8 @@ not the installed Steam directory itself.
   command can affect.
 - [Cargo integration](docs/cargo-metadata.md): required Rust workspaces,
   authority boundaries, nested-workspace consequences, and derived metadata.
-- [Setup](docs/setup.md): explicit script-owned app-local installation of
-  SteamCMD and developer-mode Rust/Cargo tooling, plus linked developer
-  providers such as Git.
+- [Setup](docs/setup.md): standalone Vapor installation and Player/Developer
+  roles.
 - [Distribution](docs/distribution.md): allowlisted staging, exclusions, docs,
   launch entrypoints/scripts, SteamPipe templates, and smoke validation.
 - [Steam development](docs/steam-development.md): root publish previews, manual
@@ -63,7 +64,7 @@ not the installed Steam directory itself.
   the same thing as the Steam installation/app root.
 - Deleting or rebuilding `cargo metadata` output does not lose authored source;
   deleting either source manifest invalidates the workspace or project.
-- Missing app-local Cargo remains diagnosable and explicitly repairable, but
+- Missing Vapor-home Cargo remains diagnosable and explicitly repairable, but
   Cargo-backed workflows cannot proceed or fall back to host Cargo.
 - `vapor metadata` reports partial state in human-readable or JSON form.
 - Commands validate only their own prerequisites and never repair them implicitly.
@@ -75,35 +76,18 @@ not the installed Steam directory itself.
 
 ## Bootstrap and validate
 
-The local bootstrap bridge expects a Vapor shell executable that was built with
-the app-local Rust/Cargo toolchain. Deploy it into the Steam app directory
-first:
+Install or repair Vapor with the standalone Installer. Open the Shell from
+Vapor home, then select a source workspace:
 
 ```text
-crates/vapor_cli/scripts/bootstrap-local-app-deploy.sh \
-  --binary /path/to/built/vapor \
-  --target "$HOME/.local/share/Steam/steamapps/common/Loo Cast" \
-  --yes
-```
-
-Then run the installed app-local command:
-
-```text
-/home/.../steamapps/common/Loo Cast/bin/vapor source open /path/to/source
-rust-script --force tools/production/app_setup/setup_player.rs --app-root "/home/.../steamapps/common/Loo Cast"
-rust-script --force tools/production/app_setup/setup_development.rs --app-root "/home/.../steamapps/common/Loo Cast"
+vapor source open /path/to/source
 fmt
-test
 validate
 content validate
 content install ghf-studios/loo-cast/loo-cast-packagepack
 content verify
 ```
 
-After that shell is installed, all normal builds and checks are routed through
-the Steam app's own Vapor shell. The bootstrap path may use `bin/vapor`; release
-launches use `bin/<target>/vapor-entrypoint[.exe]`, `bin/vapor-launch.*`
-scripts, and `bin/<target>/vapor[.exe]`.
-The source-visible `tools/production/app_setup` scripts own app-local player and
-developer tooling installation. `vapor-installer` is a compatibility shim for
-launch wrappers.
+Vapor executables, managed toolchains, caches, sources, and mutable state stay
+under Vapor home. A selected Steam product root is external content context and
+is never a Vapor installation target.

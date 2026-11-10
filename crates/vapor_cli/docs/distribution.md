@@ -1,216 +1,41 @@
-# Distribution and app/depot staging
+# Steam app/depot content staging
 
-Vapor-Root is the app/depot source root. Its `App-Source.vapor.toml` declares
-`[root]`, `[root.steam]`, and the split-depot file membership. The shipped app
-root carries `App.vapor.toml` as its runtime app marker. Vapor-Root does not
-package Workshop content into the app root and does not duplicate Cargo or Git
-submodule membership.
+`App-Source.vapor.toml` defines the Steam app payload with an explicit
+include-list. This repository is the release source; product bytes come from
+the installed content tree supplied as `VAPOR_PRODUCT_ROOT`. `App.vapor.toml`
+inside the common depot declares the composed content mount.
 
-```toml
-[root.steam]
-app-id = 2122620
-development-branch = "vapor-dev"
+The Loo-Cast composition has three content items: Spacetime Engine, Loo-Cast
+game, and Loo-Cast Packagepack. The common depot carries their shared metadata
+and files. The Linux and Windows depots carry only ABI-specific files for their
+respective target triples. The manifest excludes engine/game `lib/` folders and
+Packagepack `bin/` from common, then stages those target-specific subdirectories
+into the matching platform depot.
 
-[root.steam.depots.common]
-id = 2122621
+Vapor runtime files are a separate standalone distribution. The Steam app must
+not contain Vapor executables, launcher/entrypoint files, source checkouts,
+docs, developer tools, toolchain caches, logs, receipts, or user state. Vapor
+home owns those files and all mutable state. Steam's role is to install and
+update the content composition; Vapor mounts it and runs it.
 
-[[root.steam.depots.common.include]]
-root = "source"
-from = "App.vapor.toml"
-to = "App.vapor.toml"
-required = true
+## Staging behavior
 
-[root.steam.depots.linux]
-id = 2122622
+`root package --release-targets` rebuilds the allowlisted staging tree under
+`output/root/content` in Vapor home. `root publish --dry-run --release-targets`
+repeats the stage, validates the required manifest paths, fingerprints the
+payload, and writes SteamPipe preview files without uploading. A real publish
+re-stages and verifies the fingerprint before upload. Neither operation copies
+from the full Vapor home or adds undeclared files.
 
-[[root.steam.depots.linux.include]]
-root = "source"
-from = "resources/vapor/shell-scripts/linux/vapor-launch.sh"
-to = "bin/vapor-launch.sh"
-required = true
+The `root.runtime.targets` list describes ABI targets available for this
+product. `--target TARGET` selects a deliberate subset for a preview; the real
+release should include the complete declared target matrix. Target-specific
+includes must name the same target as the depot's operating-system kind.
 
-[[root.steam.depots.linux.include]]
-root = "installation"
-from = "bin/x86_64-unknown-linux-gnu"
-to = "bin/x86_64-unknown-linux-gnu"
-target = "x86_64-unknown-linux-gnu"
-required = true
+Vapor keeps source checkouts, compiler state, tools, extracted-source cache,
+installation records, settings, logs, and generated output in Vapor home. The
+product source tree is an explicit input, not the owner of Vapor state.
 
-[root.steam.depots.windows]
-id = 2122623
-
-[[root.steam.depots.windows.include]]
-root = "source"
-from = "resources/vapor/shell-scripts/windows/vapor-launch.cmd"
-to = "bin/vapor-launch.cmd"
-required = true
-
-[[root.steam.depots.windows.include]]
-root = "installation"
-from = "bin/x86_64-pc-windows-gnullvm"
-to = "bin/x86_64-pc-windows-gnullvm"
-target = "x86_64-pc-windows-gnullvm"
-required = true
-
-[[root.steam.depots.windows.include]]
-root = "installation"
-from = "bin/x86_64-pc-windows-gnullvm/libunwind.dll"
-to = "bin/x86_64-pc-windows-gnullvm/libunwind.dll"
-target = "x86_64-pc-windows-gnullvm"
-required = true
-
-[root.runtime]
-targets = [
-    "x86_64-unknown-linux-gnu",
-    "x86_64-pc-windows-gnullvm",
-]
-```
-
-The depot IDs are the Steamworks DepotIDs. The include list is the source of
-truth for file membership. `root = "source"` copies from the Vapor-Root source
-checkout; `root = "installation"` copies from the Steam app root. `target`
-limits an include to package/publish commands that stage that runtime target.
-
-`root publish --dry-run` reconstructs clean Steam depot payloads under
-`output/root/content` inside the app root and writes a preview SteamPipe app
-build VDF plus one depot build VDF per staged depot without uploading. The
-payload is split by the manifest-declared Steam depot includes:
-
-- `common/` contains OS-neutral files: `App.vapor.toml`, `docs/`,
-  `resources/vapor/vapor-scripts/` when runtime startup scripts are present, and
-  `examples/vapor-examples/` when the root source includes official examples.
-- `linux/` contains Linux runtime files: selected Linux `bin/<target>/`
-  application binaries including `vapor`, `vapor-entrypoint`,
-  `vapor-installer`, `vapor-gui` (the chooser), `vapor-launcher`,
-  `vapor-studio`, `vapor-ide`, `vapor-installer-gui`, `vapor-client-service`,
-  and `vapor-ide-host`, plus `libsteam_api.so` and `bin/vapor-launch.sh`.
-- `windows/` contains Windows runtime files: selected Windows `bin/<target>/`
-  application binaries including `vapor.exe`, `vapor-entrypoint.exe`,
-  `vapor-installer.exe`, `vapor-gui.exe` (the chooser), `vapor-launcher.exe`,
-  `vapor-studio.exe`, `vapor-ide.exe`, `vapor-installer-gui.exe`,
-  `vapor-client-service.exe`, and `vapor-ide-host.exe`, including
-  `steam_api64.dll` and other required Windows
-  runtime DLLs, plus `bin/vapor-launch.cmd`.
-
-The service owns the Steamworks native library metadata and runtime packaging
-rule. `vapor-client-service` embeds a relative loader path on Linux and resolves
-its sibling DLL on Windows. Installer launches without requiring the shared
-service so recovery remains available when service startup fails.
-
-Source repositories, Cargo build targets, Cargo registries, Git checkouts,
-Steam authentication, installer logs, generated app-root state, and SteamPipe
-cache state are not staged.
-The examples payload is source material for learning and templating; it is
-copied without its `.git/` or `target/` directories and is not Workshop content.
-SteamPipe VDF file bodies live as checked-in source templates under
-`resources/steam/steampipe-templates/`; Vapor Shell loads them from the active
-source checkout and fills IDs, paths, branch, and description values at publish
-time. The templates are distribution policy, not Shell crate assets and not
-runtime depot content unless `App-Source.vapor.toml` explicitly includes them.
-
-Source-controlled support assets live under visible `resources/` paths. The
-installed app-root `.vapor/` directory is reserved for disposable generated
-state such as logs, diagnostics runs, content cache, and receipts.
-
-When `[root.runtime].targets` is declared, no target flag means release-matrix
-staging. Repeat `--target` to build and stage a deliberate custom subset. Use
-`--host-only` for quick local packages that should not require or advertise
-other platform launch scripts. Staging always includes the common depot plus
-the platform depots implied by the selected targets, and fails when a selected
-`bin/<target>/` directory is missing after the build refresh.
-
-`root package` and real `root publish` compile and promote Cargo's optimized
-release profile from `output/release/`. `root build` and `root deploy` remain
-developer-profile operations under `output/dev/`. This keeps debug symbols and
-development outputs out of the Steam depot.
-
-Real `root publish` does not accept custom target subsets, `--host-only`, or
-`--skip-build`. It validates, builds, promotes, stages, and uploads the complete
-declared Linux+Windows runtime matrix. Those escape hatches exist only for
-`root package` target selection and `root publish --dry-run` staging previews.
-
-Release staging is one app build with split depot roots. Steamworks should
-mount the common depot for every OS, the Linux depot only for Linux, and the
-Windows depot only for Windows. This prevents Linux Steam clients from selecting
-the Windows/Proton launch path because of a mixed mono-depot payload.
-
-For a release assembled from artifacts built on multiple machines, import the
-target-specific app binaries into `bin/<target>/`, then use
-`root publish --skip-build --dry-run` only as a preview that confirms the
-imported files stage correctly.
-
-Steam's default launch starts the persistently selected playable composition
-through the Client service. The app manifest's `default` root only seeds an
-empty first-run selection. Its optional `chooser` launch option opens Launcher, Studio, IDE,
-Installer, and Shell. The CLI mirrors these routes with
-`vapor client launch [MODE]`.
-Installer opens its GUI product when available and falls back to the precompiled
-installer. Shell stays a terminal recovery option:
-
-```text
-bin/x86_64-unknown-linux-gnu/vapor-entrypoint
-  -> bin/x86_64-unknown-linux-gnu/vapor launch selected
-
-bin/x86_64-unknown-linux-gnu/vapor-entrypoint chooser
-  -> bin/x86_64-unknown-linux-gnu/vapor-gui --mode chooser
-  -> re-enters vapor-entrypoint with the selected mode
-     studio -> vapor-studio
-     ide -> vapor-ide
-     installer -> vapor-installer-gui
-     shell -> Konsole -> vapor
-
-bin/x86_64-unknown-linux-gnu/vapor-entrypoint shell
-  -> Konsole -> bin/vapor-launch.sh --hold shell
-  -> bin/x86_64-unknown-linux-gnu/vapor
-
-bin/x86_64-unknown-linux-gnu/vapor-entrypoint installer
-  -> bin/x86_64-unknown-linux-gnu/vapor-installer-gui
-  -> if GUI is absent: Konsole -> bin/vapor-launch.sh --hold installer
-  -> bin/x86_64-unknown-linux-gnu/vapor-installer
-
-bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe
-  -> bin\x86_64-pc-windows-gnullvm\vapor.exe launch selected
-
-bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe chooser
-  -> bin\x86_64-pc-windows-gnullvm\vapor-gui.exe --mode chooser
-  -> re-enters vapor-entrypoint with the selected mode
-     studio -> vapor-studio.exe
-     ide -> vapor-ide.exe
-     installer -> vapor-installer-gui.exe
-     shell -> cmd /C -> vapor
-
-bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe shell
-  -> cmd /C -> bin\vapor-launch.cmd --hold shell
-  -> bin\x86_64-pc-windows-gnullvm\vapor.exe
-  -> cmd /K after Vapor exits
-
-bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe installer
-  -> bin\x86_64-pc-windows-gnullvm\vapor-installer-gui.exe
-  -> if GUI is absent: cmd /C -> bin\vapor-launch.cmd --hold installer
-  -> bin\x86_64-pc-windows-gnullvm\vapor-installer.exe
-  -> cmd /K after Vapor Installer exits
-```
-
-The launch scripts dispatch an explicit Installer request to `vapor-installer`
-and send GUI requests to the target entrypoint. Opening the ordinary Shell does
-not implicitly run Installer setup; setup and role changes belong to the
-Installer workflow. The Windows Shell uses the console's normal echoed line
-input because Reedline does not reliably paint the current input line in some
-Windows console hosts. Entry points and scripts are not a substitute for
-target-specific app or content payloads; Vapor itself, engines, games, tools,
-and dynamic libraries all need runtime outputs staged per supported target.
-
-The publish preflight requires app-local Rust/Cargo and cross-build tooling for
-the release matrix, a linked developer Git provider for explicit Git-backed
-workflows, plus SteamCMD for real upload. Player-mode and developer-mode setup
-are owned by app-root tools under `<app-root>/resources/vapor/tools/`.
-
-The root source owns the tool payload under `resources/vapor/tools`; root
-build/package/publish copies that payload into the installed app root. The
-generated mutable state those tools create remains outside SteamPipe staging.
-`vapor-installer` still uses the same shared implementation in-process so
-first-run setup does not depend on `rust-script` already being available.
-
-Workshop content is separate from this depot flow. A workspace such as
-Loo-Cast can publish Workshop items and packagepacks, but the content itself is
-not part of Vapor-Root's app payload.
+SteamPipe templates remain source-controlled under
+`resources/steam/steampipe-templates/`. These templates generate the upload
+instructions and are not automatically included in a depot.

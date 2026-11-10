@@ -1,6 +1,13 @@
 # Vapor product topology
 
-Status: **canonical design checkpoint; implemented baseline plus planned policy**
+Status: **historical checkpoint; superseded by the standalone Vapor and
+content-only Steam boundary**
+
+The app-root/Steam-installed topology described below is no longer current.
+Vapor is independently installed under Vapor home. Steam carries only each
+product's manifest-declared content, split by ABI where binaries differ. Use
+`setup.md`, `discovery.md`, and `steam-development.md` for current ownership and
+release behavior. This file remains only as background for earlier decisions.
 
 This document records the product model Vapor Shell is converging on. It is the
 source of truth for vocabulary, containment, authority, and workflow intent. It

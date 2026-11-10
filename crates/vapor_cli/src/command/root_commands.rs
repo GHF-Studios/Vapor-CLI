@@ -82,7 +82,6 @@ pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(
         } => {
             metadata.validate(
                 &ValidationPlan::new("package the Vapor application")
-                    .app_local_tools(&[AppToolRequirement::Rust])
                     .workspace()
                     .distribution(),
             )?;
@@ -115,7 +114,6 @@ pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(
             target,
             release_targets,
             host_only,
-            skip_build,
             description,
             dry_run,
             yes,
@@ -131,19 +129,13 @@ pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(
                         .to_owned(),
                 );
             }
-            if !dry_run && skip_build {
-                return Err(
-                    "real app publication must validate, build, and promote the complete runtime matrix; --skip-build is only for dry-run previews"
-                        .to_owned(),
-                );
-            }
             let tool_requirements = if dry_run {
-                vec![AppToolRequirement::Rust]
+                Vec::new()
             } else {
                 vec![AppToolRequirement::SteamCmd]
             };
             metadata.validate(
-                &ValidationPlan::new("publish the Vapor application")
+                &ValidationPlan::new("publish manifest-declared application content")
                     .app_local_tools(&tool_requirements)
                     .workspace()
                     .distribution(),
@@ -157,14 +149,11 @@ pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(
                 "app publication",
             )?;
             let stage_options = StageOptions::runtime().with_runtime_targets(targets.clone());
-            if skip_build {
-                println!("build: skipped; using already-promoted app binaries");
-            }
             let mut client = connect_client_service(state)?;
-            crate::diagnostics::event("root publish: opening selected source workspace");
+            crate::diagnostics::event("application release: opening selected source workspace");
             open_workspace_in_service(&mut client, state)?;
             crate::diagnostics::event(
-                "root publish: source workspace opened; requesting release stage",
+                "application release: source workspace opened; requesting manifest staging",
             );
             let stage_event = send_client_action(
                 &mut client,
@@ -173,7 +162,6 @@ pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(
                     branch: branch.clone(),
                     description: description.clone(),
                     runtime_targets: targets.clone(),
-                    build_release: !skip_build,
                 }),
             )?
             .ok_or_else(|| {
@@ -186,9 +174,9 @@ pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(
             ));
             let review = wait_for_application_release_review(&mut client, &stage_event.id)?;
             print_service_operation_message(Some(stage_event));
-            println!("payload: split runtime depots");
+            println!("payload: manifest-declared application content");
             println!(
-                "runtime targets: {}",
+                "ABI targets: {}",
                 stage_options.runtime_targets().join(", ")
             );
             println!("app id: {}", review.app_id);
@@ -198,7 +186,7 @@ pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(
             println!("SteamPipe build script: {}", review.build_script);
             if dry_run {
                 println!(
-                    "hint: review the staged app, then run `root publish --account ACCOUNT --yes`"
+                    "hint: review the staged content, then run `root publish --account ACCOUNT --yes`"
                 );
             } else {
                 let confirmation =
