@@ -9,6 +9,7 @@ mod diagnostics;
 mod git_provider;
 mod ide;
 mod launch_session;
+mod storage_report;
 mod prompt;
 
 pub mod app_local_tools;

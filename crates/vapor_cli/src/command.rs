@@ -83,6 +83,9 @@ fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control
         ShellCommand::Installation => {
             println!("{}", state.installation().root().display());
         }
+        ShellCommand::Cleanup { command } => {
+            crate::storage_report::execute(command, state.installation().root())?;
+        }
         ShellCommand::Binaries => {
             println!("{}", state.installation().binaries().display());
         }

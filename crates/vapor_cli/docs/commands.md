@@ -155,6 +155,26 @@ discovery may still resolve Git after this.
 
 ## Installation resources
 
+### `cleanup list [--json]`
+
+Print the canonical Vapor-home breakdown and individually selectable generated
+data. `--json` emits the same inventory used by Vapor Cleanup. Source, content,
+tools, configuration, and state are retained; unclassified folders are shown
+for accounting but are never offered for deletion.
+
+### `cleanup inspect ID`
+
+Show one item's exact location, logical size, and consequences without changing
+files. It prints the exact command and typed phrase required to remove it.
+
+### `cleanup remove ID --expected-bytes N --confirm "DELETE ID"`
+
+Delete one listed item only when the current byte count still matches the size
+reviewed and `--confirm` exactly matches `DELETE ID`. Vapor rescans immediately
+before deletion and never accepts an arbitrary filesystem path. Build output
+warns that the next build must recompile; Cargo caches warn that they must be
+fetched again.
+
 ### `installation`
 
 Print the Steam installation/app root discovered from the running Vapor

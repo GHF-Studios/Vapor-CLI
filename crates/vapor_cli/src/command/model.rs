@@ -51,6 +51,13 @@ pub enum ShellCommand {
     /// Print the Steam installation/app root.
     Installation,
 
+    /// Inspect Vapor storage and remove explicitly reviewed generated data.
+    Cleanup {
+        /// Selected storage read or write operation.
+        #[command(subcommand)]
+        command: CleanupCommand,
+    },
+
     /// Print the directory containing the running Vapor shell binary.
     Binaries,
 
@@ -179,6 +186,33 @@ pub enum LaunchCommand {
     Selected,
 }
 
+/// Read the canonical Vapor storage inventory or delete one listed item.
+#[derive(Debug, Subcommand, Clone)]
+pub enum CleanupCommand {
+    /// List storage areas and cleanup candidates.
+    List {
+        /// Emit structured JSON for other Vapor tools.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Inspect one exact candidate ID from `cleanup list` without changing files.
+    Inspect {
+        /// Exact candidate ID printed by `cleanup list`.
+        id: String,
+    },
+    /// Remove one exact candidate ID from `cleanup list`.
+    Remove {
+        /// Exact candidate ID printed by `cleanup list`.
+        id: String,
+        /// Byte count shown during review. Removal is refused if it has changed.
+        #[arg(long, required = true)]
+        expected_bytes: u64,
+        /// Exact phrase `DELETE <ID>` shown by `cleanup inspect`.
+        #[arg(long, required = true)]
+        confirm: String,
+    },
+}
+
 #[derive(Debug, Subcommand)]
 /// Operations on an installed playable composition through the shared service.
 pub enum CompositionCommand {
@@ -281,6 +315,8 @@ pub enum ClientLaunchMode {
     Installer,
     /// Open the Rust workspace IDE.
     Ide,
+    /// Open the storage accounting and targeted cleanup tool.
+    Cleanup,
 }
 
 pub(super) fn client_launch_arguments(
@@ -294,6 +330,7 @@ pub(super) fn client_launch_arguments(
         ClientLaunchMode::Shell => "shell",
         ClientLaunchMode::Installer => "installer",
         ClientLaunchMode::Ide => "ide",
+        ClientLaunchMode::Cleanup => "cleanup",
     };
     std::iter::once(std::ffi::OsString::from(mode))
         .chain(arguments)

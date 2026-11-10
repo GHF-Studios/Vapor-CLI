@@ -3,7 +3,7 @@
 use crate::{
     app_local_tools,
     command::{
-        self, ClientCommand, ContentCommand, Control, DiagnosticsCommand, LaunchCommand,
+        self, CleanupCommand, ClientCommand, ContentCommand, Control, DiagnosticsCommand, LaunchCommand,
         ProviderCommand, RootCommand, ScriptCommand, ShellCommand, SourceCommand,
     },
     diagnostics::{self, CaptureOptions},
@@ -12,6 +12,7 @@ use crate::{
     metadata::MetadataFormat,
     prompt::VaporPrompt,
     state::ShellState,
+    storage_report,
 };
 use clap::{Parser, Subcommand, error::ErrorKind};
 use clap_repl::{ClapEditor, ReadCommandOutput};
@@ -47,6 +48,10 @@ pub fn run() -> Result<(), String> {
     diagnostics::init_from_current_exe(startup.diagnostics);
     let result = match startup.mode {
         StartupMode::Direct(ShellCommand::Client { command }) => command::execute_client(command),
+        StartupMode::Direct(ShellCommand::Cleanup { command }) => {
+            let installation = EnvironmentPaths::discover_installation()?;
+            storage_report::execute(command, installation.root())
+        }
         mode => run_inner(mode),
     };
     if let Err(error) = &result {
@@ -325,6 +330,11 @@ enum HostSubcommand {
     },
     /// Print the Steam installation/app root.
     Installation,
+    /// Inspect or remove selected generated data in the canonical Vapor home.
+    Cleanup {
+        #[command(subcommand)]
+        command: CleanupCommand,
+    },
     /// Print the app-local binary directory.
     Binaries,
     /// Print the app-local library directory.
@@ -412,6 +422,7 @@ impl HostSubcommand {
             HostSubcommand::Client { command } => ShellCommand::Client { command },
             HostSubcommand::Source { command } => ShellCommand::Source { command },
             HostSubcommand::Installation => ShellCommand::Installation,
+            HostSubcommand::Cleanup { command } => ShellCommand::Cleanup { command },
             HostSubcommand::Binaries => ShellCommand::Binaries,
             HostSubcommand::Libraries => ShellCommand::Libraries,
             HostSubcommand::Metadata { format } => ShellCommand::Metadata { format },
