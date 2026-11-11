@@ -30,10 +30,15 @@ fn execute_client_body(command: ClientCommand) -> Result<(), String> {
             LocalClientDeploymentOutcome::AuthorityDelegated {
                 executable,
                 installation_root,
+                completion_log,
             } => {
-                println!("Transferring local deployment authority to source-built CLI:");
+                println!("Local deployment was handed to the source-built CLI:");
                 println!("  executable: {}", executable.display());
                 println!("  installation: {}", installation_root.display());
+                if let Some(log) = completion_log {
+                    println!("  promotion starts after this Vapor command exits");
+                    println!("  result log: {}", log.display());
+                }
             }
             LocalClientDeploymentOutcome::Deployed {
                 report,
