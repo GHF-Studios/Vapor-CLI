@@ -25,6 +25,7 @@ pub(crate) use client_commands::{
 };
 pub(crate) use source_commands::active_source_root;
 mod content_commands;
+mod journey_commands;
 mod model;
 mod root_commands;
 mod source_commands;
@@ -67,6 +68,7 @@ fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control
         ShellCommand::Composition { command } => {
             composition_commands::execute_composition(command, state)?;
         }
+        ShellCommand::Journey { command } => journey_commands::execute_journey(command, state)?,
         ShellCommand::Toolchain { command } => match command {
             ToolchainCommand::Tracy => {
                 let mut client = client_commands::connect_client_service(state)?;

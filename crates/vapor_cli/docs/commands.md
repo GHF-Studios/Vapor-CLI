@@ -112,6 +112,22 @@ vapor composition launch composition-1
 `launch --current-workspace` remains the separate developer path for running a
 workspace's default source configuration with the managed Rust toolchain.
 
+## Journeys
+
+### `journey status`
+
+Show shared Player and Developer quests, prerequisites, completion evidence,
+and points. The Launcher and CLI read and update the same progress under Vapor
+Home. Install and launch quests are credited from observed composition state or
+successful Client operations; Developer tool readiness is credited only from
+the installed Developer role snapshot.
+
+### `journey confirm QUEST_ID`
+
+Confirm a learning step that Vapor cannot observe directly. Only quests marked
+for explicit confirmation accept this command; operational quests cannot be
+manually awarded.
+
 ## Diagnostics
 
 ### `diagnostics status`

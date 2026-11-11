@@ -34,6 +34,13 @@ pub enum ShellCommand {
         command: CompositionCommand,
     },
 
+    /// View and advance the shared Player and Developer tutorial journeys.
+    Journey {
+        /// Journey progress operation.
+        #[command(subcommand)]
+        command: JourneyCommand,
+    },
+
     /// Build and locally deploy the Vapor Client workspace from source.
     Client {
         /// Client operation.
@@ -235,6 +242,18 @@ impl CompositionCommand {
             Self::Launch { .. } => "launch",
         }
     }
+}
+
+#[derive(Debug, Subcommand)]
+/// Shared guided onboarding progress.
+pub enum JourneyCommand {
+    /// Show quests, prerequisites, and earned points.
+    Status,
+    /// Confirm a learning step that Vapor cannot observe directly.
+    Confirm {
+        /// Stable quest ID shown by `journey status`.
+        quest_id: String,
+    },
 }
 
 /// Utilities installed by the version-pinned Vapor toolchain.
