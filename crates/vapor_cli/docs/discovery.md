@@ -27,11 +27,14 @@ The app root may contain app-owned resources including:
 │   ├── x86_64-unknown-linux-gnu/vapor
 │   ├── x86_64-pc-windows-gnullvm/vapor-entrypoint.exe
 │   └── x86_64-pc-windows-gnullvm/vapor.exe
-├── rustup/
-├── cargo-home/
+├── tools/
+│   ├── cargo/
+│   │   └── home/
+│   ├── rustup/
+│   │   ├── bin/
+│   │   └── home/toolchains/
+│   └── steamcmd/
 ├── lib/
-├── rustup-home/
-├── tools/steamcmd/
 ├── content/
 └── output/
 ```

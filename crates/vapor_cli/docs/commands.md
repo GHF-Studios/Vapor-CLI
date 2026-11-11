@@ -372,7 +372,11 @@ Installable means a workspace declares at least one
 `[workspace].binaries` entry. When `[root.runtime].targets` is declared,
 omitting target flags builds that full runtime matrix by default. Repeat
 `--target` to build an explicit custom subset, such as only Windows GNU/LLVM.
-`--release` uses Cargo's optimized profile and does not promote outputs.
+`--release` selects Cargo's optimized profile and is accepted only in Vapor's
+designated GitHub Actions distribution job. Local work uses the single `dev`
+profile. The distribution job sets `VAPOR_DISTRIBUTION_JOB=steam-release-v1`.
+For `root publish --dry-run`, staging reuses already built outputs; it does not
+create release binaries locally.
 
 `root build` does not refresh installed app binaries, docs, Vapor scripts, or
 launch scripts. Use `root deploy` to promote already-built app outputs into the
@@ -397,17 +401,16 @@ faster binary/script refresh.
 
 ### `root package [--target TARGET]... [--release-targets] [--host-only]`
 
-Build and refresh the local Steam app root using Cargo's optimized release
-profile, assemble the clean allowlisted
-split-depot app payload, and smoke-check the staged package without invoking
-SteamCMD. The default root payload is runtime-only: the common depot carries
+Assemble and smoke-check the clean allowlisted split-depot app payload without
+invoking SteamCMD. Release binaries must already exist; only the designated CI
+distribution job may create them. The default root payload is runtime-only: the common depot carries
 `App.vapor.toml`, `docs/`, app scripts, and packaged examples; platform depots
 carry selected `bin/<target>/` application binaries, including
 `vapor-entrypoint[.exe]`, and target-matching `bin/vapor-launch.*` scripts.
 
 When `[root.runtime].targets` is declared, omitting target flags stages that
-full matrix by default. Repeat `--target` to build and stage a deliberate
-custom subset. Use `--host-only` for a local host-only package.
+full matrix by default. Repeat `--target` to stage a deliberate custom subset.
+Use `--host-only` only when making a preview from existing host outputs.
 
 ### `root publish [--account ACCOUNT] [--branch BRANCH] [--dry-run] [--yes]`
 

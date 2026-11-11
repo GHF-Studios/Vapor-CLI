@@ -119,10 +119,11 @@ other platform launch scripts. Staging always includes the common depot plus
 the platform depots implied by the selected targets, and fails when a selected
 `bin/<target>/` directory is missing after the build refresh.
 
-`root package` and real `root publish` compile and promote Cargo's optimized
-release profile from `output/release/`. `root build` and `root deploy` remain
-developer-profile operations under `output/dev/`. This keeps debug symbols and
-development outputs out of the Steam depot.
+Only the designated CI distribution job may compile/promote Cargo's optimized
+release profile or upload Steam/Workshop content. `root package` stages existing
+release outputs; local `root build` and `root deploy` remain developer-profile
+operations. This keeps local work in `dev` and distributed artifacts out of
+the development output tree.
 
 Real `root publish` does not accept custom target subsets, `--host-only`, or
 `--skip-build`. It validates, builds, promotes, stages, and uploads the complete

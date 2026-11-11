@@ -173,7 +173,10 @@ pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(
                     branch: branch.clone(),
                     description: description.clone(),
                     runtime_targets: targets.clone(),
-                    build_release: !skip_build,
+                    // A local dry-run may inspect/stage an existing package,
+                    // but only the distribution CI job may create release
+                    // profile binaries.
+                    build_release: !dry_run && !skip_build,
                 }),
             )?
             .ok_or_else(|| {
