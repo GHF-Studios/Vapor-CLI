@@ -2,9 +2,10 @@
 
 Vapor-Root is the app/depot source root. Its `App-Source.vapor.toml` declares
 `[root]`, `[root.steam]`, and the split-depot file membership. The shipped app
-root carries `App.vapor.toml` as its runtime app marker. Vapor-Root does not
-package Workshop content into the app root and does not duplicate Cargo or Git
-submodule membership.
+root carries `App.vapor.toml` as its runtime app marker. The reviewed
+first-party Engine, Game, and Packagepack runtime closure is bundled under
+`content/default/`; mutable Workshop Library state remains in Vapor User Data.
+Vapor-Root does not duplicate Cargo or Git submodule membership.
 
 ```toml
 [root.steam]
@@ -72,33 +73,35 @@ checkout; `root = "installation"` copies from the Steam app root. `target`
 limits an include to package/publish commands that stage that runtime target.
 
 `root publish --dry-run` reconstructs clean Steam depot payloads under
-`output/root/content` inside the app root and writes a preview SteamPipe app
+`<Vapor User Data>/output/root/content` and writes a preview SteamPipe app
 build VDF plus one depot build VDF per staged depot without uploading. The
 payload is split by the manifest-declared Steam depot includes:
 
-- `common/` contains OS-neutral files: `App.vapor.toml`, `docs/`,
-  `resources/vapor/vapor-scripts/` when runtime startup scripts are present, and
-  `examples/vapor-examples/` when the root source includes official examples.
+- `common/` contains OS-neutral files: `App.vapor.toml`, default App role
+  manifests, and shared Engine assets. Authored tools and shell scripts are
+  copied into Vapor User Data; the Installer's required bootstrap code is
+  compiled into its shipped binary. Generated documentation and examples also
+  stay outside the Steam depot.
 - `linux/` contains Linux runtime files: selected Linux `bin/<target>/`
   application binaries including `vapor`, `vapor-entrypoint`,
-  `vapor-installer`, `vapor-gui` (the chooser), `vapor-launcher`,
-  `vapor-studio`, `vapor-ide`, `vapor-installer-gui`, `vapor-client-service`,
-  and `vapor-ide-host`, plus `libsteam_api.so` and `bin/vapor-launch.sh`.
+  `vapor-installer`, `vapor-gui` (all GUI modes), `vapor-client-service`,
+  and `vapor-ide-host`, plus `libsteam_api.so`, `bin/vapor-launch.sh`, and the
+  Linux default Packagepack binary.
 - `windows/` contains Windows runtime files: selected Windows `bin/<target>/`
   application binaries including `vapor.exe`, `vapor-entrypoint.exe`,
-  `vapor-installer.exe`, `vapor-gui.exe` (the chooser), `vapor-launcher.exe`,
-  `vapor-studio.exe`, `vapor-ide.exe`, `vapor-installer-gui.exe`,
+  `vapor-installer.exe`, `vapor-gui.exe` (all GUI modes),
   `vapor-client-service.exe`, and `vapor-ide-host.exe`, including
   `steam_api64.dll` and other required Windows
-  runtime DLLs, plus `bin/vapor-launch.cmd`.
+  runtime DLLs, plus `bin/vapor-launch.cmd` and the Windows default Packagepack
+  binary.
 
 The service owns the Steamworks native library metadata and runtime packaging
-rule. `vapor-client-service` embeds a relative loader path on Linux and resolves
-its sibling DLL on Windows. Installer launches without requiring the shared
+rule. `vapor-client-service` and `vapor` embed a relative loader path on Linux;
+the service resolves its sibling DLL on Windows. Installer launches without requiring the shared
 service so recovery remains available when service startup fails.
 
 Source repositories, Cargo build targets, Cargo registries, Git checkouts,
-Steam authentication, installer logs, generated app-root state, and SteamPipe
+Steam authentication, installer logs, generated Vapor User Data, and SteamPipe
 cache state are not staged.
 The examples payload is source material for learning and templating; it is
 copied without its `.git/` or `target/` directories and is not Workshop content.
@@ -108,9 +111,9 @@ source checkout and fills IDs, paths, branch, and description values at publish
 time. The templates are distribution policy, not Shell crate assets and not
 runtime depot content unless `App-Source.vapor.toml` explicitly includes them.
 
-Source-controlled support assets live under visible `resources/` paths. The
-installed app-root `.vapor/` directory is reserved for disposable generated
-state such as logs, diagnostics runs, content cache, and receipts.
+Source-controlled support assets live under visible `resources/` paths. Logs,
+diagnostics, downloaded content, caches, receipts, and developer toolchains
+belong to Vapor User Data. The Steam app instance remains replaceable.
 
 When `[root.runtime].targets` is declared, no target flag means release-matrix
 staging. Repeat `--target` to build and stage a deliberate custom subset. Use
@@ -200,7 +203,7 @@ Windows console hosts. Entry points and scripts are not a substitute for
 target-specific app or content payloads; Vapor itself, engines, games, tools,
 and dynamic libraries all need runtime outputs staged per supported target.
 
-The publish preflight requires app-local Rust/Cargo and cross-build tooling for
+The publish preflight requires Vapor User Data Rust/Cargo and cross-build tooling for
 the release matrix, a linked developer Git provider for explicit Git-backed
 workflows, plus SteamCMD for real upload. Player-mode and developer-mode setup
 are owned by app-root tools under `<app-root>/resources/vapor/tools/`.
@@ -211,6 +214,6 @@ generated mutable state those tools create remains outside SteamPipe staging.
 `vapor-installer` still uses the same shared implementation in-process so
 first-run setup does not depend on `rust-script` already being available.
 
-Workshop content is separate from this depot flow. A workspace such as
-Loo-Cast can publish Workshop items and packagepacks, but the content itself is
-not part of Vapor-Root's app payload.
+Workshop publishing is separate from the default App depot payload. Loo-Cast
+can publish searchable Engine, Game, and Packagepack items; Steam Play uses
+the depot-owned closure before any Workshop acquisition.

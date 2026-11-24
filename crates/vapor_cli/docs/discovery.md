@@ -27,13 +27,17 @@ The app root may contain app-owned resources including:
 │   ├── x86_64-unknown-linux-gnu/vapor
 │   ├── x86_64-pc-windows-gnullvm/vapor-entrypoint.exe
 │   └── x86_64-pc-windows-gnullvm/vapor.exe
-├── rustup/
-├── cargo-home/
 ├── lib/
-├── rustup-home/
-├── tools/steamcmd/
-├── content/
-└── output/
+└── content/default/                     depot-owned default App
+
+<Vapor User Data>/
+├── state/                                selection and installer receipts
+├── logs/ and diagnostics/
+├── content/                              mutable Workshop packages
+├── output/                               disposable build and depot staging
+├── rustup/ and rustup-home/
+├── cargo-home/
+└── tools/                               SteamCMD and cross toolchains
 ```
 
 Only `App.vapor.toml` and the running executable are required for installation
@@ -45,7 +49,7 @@ Starting Vapor discovers the installed app first. The app can then start with an
 active source or in a closed, app-only shell state. Source selection is explicit:
 
 1. `VAPOR_WORKSPACE`, when set;
-2. the path stored in `<app-root>/.vapor/state/source-workspace` by
+2. the path stored in `<Vapor User Data>/state/source-workspace` by
    `source open`;
 3. no source, leaving the shell closed until `source open SOURCE` succeeds.
 

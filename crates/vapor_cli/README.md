@@ -12,14 +12,19 @@ Steam installation / app root         Active source root (critical)
 ├── bin/<target>/vapor-entrypoint[.exe]
 ├── bin/<target>/vapor[.exe]          ├── content directories with role manifests
 ├── resources/vapor/vapor-scripts/    └── authored source
-├── .vapor/logs, state, cache, ...
-├── tools/steamcmd
-└── content / installed Workshop artifacts
+└── content/default/                  depot-owned default App
+
+Vapor User Data
+├── state/, logs/, diagnostics/
+├── content/                         mutable Workshop artifacts
+├── output/                          disposable build and staging
+├── cargo-home/, rustup-home/, rustup/
+└── tools/                           SteamCMD and cross toolchains
 ```
 
 The roots must not overlap. Vapor discovers the installation from the running
 executable. Source roots are opened explicitly by path or app-local registered
-name, and the last active source is remembered under the app root. Interactive
+name, and the last active source is remembered in Vapor User Data. Interactive
 filesystem navigation is confined to the opened source root.
 
 The product model also distinguishes a third concept: a Vapor application
@@ -40,7 +45,7 @@ not the installed Steam directory itself.
   command can affect.
 - [Cargo integration](docs/cargo-metadata.md): required Rust workspaces,
   authority boundaries, nested-workspace consequences, and derived metadata.
-- [Setup](docs/setup.md): explicit script-owned app-local installation of
+- [Setup](docs/setup.md): explicit script-owned Vapor User Data installation of
   SteamCMD and developer-mode Rust/Cargo tooling, plus linked developer
   providers such as Git.
 - [Distribution](docs/distribution.md): allowlisted staging, exclusions, docs,

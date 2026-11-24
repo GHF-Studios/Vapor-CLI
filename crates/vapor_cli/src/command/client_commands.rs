@@ -98,7 +98,18 @@ pub(super) fn execute_launch(
         // `default` remains accepted as a compatibility spelling, but it no
         // longer bypasses the service-owned persistent selection.
         LaunchCommand::Default | LaunchCommand::Selected => launch_selected_composition(state),
+        LaunchCommand::BundledDefault => launch_bundled_default(state),
     }
+}
+
+fn launch_bundled_default(state: &ShellState) -> Result<(), String> {
+    let installation = state.installation();
+    let id = vapor_client_provider::content::default_packagepack_id(installation, "default")?;
+    let (_, plan) =
+        vapor_client_provider::content::prepare_depot_default_launch(installation, &id)?
+            .ok_or_else(|| format!("the Steam app has no bundled default Packagepack '{id}'"))?;
+    println!("Launching bundled Loo Cast…");
+    vapor_client_provider::content::run_packagepack_launch(&plan, "bundled-default", &[])
 }
 
 fn launch_client_entrypoint(

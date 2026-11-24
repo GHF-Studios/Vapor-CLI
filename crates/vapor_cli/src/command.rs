@@ -641,7 +641,7 @@ fn find_script(state: &ShellState, name: &str) -> Result<PathBuf, String> {
     candidates.push(
         state
             .installation()
-            .root()
+            .user_data_root()
             .join("resources/vapor/vapor-scripts")
             .join(filename),
     );

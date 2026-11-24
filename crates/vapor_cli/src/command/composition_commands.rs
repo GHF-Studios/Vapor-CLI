@@ -33,6 +33,9 @@ pub(super) fn execute_composition(
     let operation = command.operation_name();
     let action = match command {
         CompositionCommand::List => unreachable!("list is handled before dispatch"),
+        CompositionCommand::Select { composition_id } => {
+            CompositionAction::Select { composition_id }
+        }
         CompositionCommand::Install { composition_id } => {
             CompositionAction::Install { composition_id }
         }

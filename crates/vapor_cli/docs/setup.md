@@ -1,9 +1,9 @@
 # Vapor installation and local setup
 
 Normal closed-alpha testers should not run manual setup commands before first
-launch. The Steam app starts through the platform entrypoint, the launch script
-calls the shipped `vapor-installer` shim, and that shim delegates to the
-app-root tool layer.
+launch. The Steam app starts through the platform entrypoint and uses the
+packaged default App. First launch records Player readiness in Vapor User Data;
+it does not fetch Rust, SteamCMD, or source.
 
 Canonical tools live in the installed app root:
 
@@ -47,7 +47,7 @@ rust-script --force <app-root>/resources/vapor/tools/development/ide_setup/patch
 `vapor-installer` remains an app binary wrapper for launch scripts and old
 command habits. It does not make the SuperWorkspace own tools.
 
-The app root is disposable. Script-managed state under the app root is
-recreateable tooling, caches, logs, receipts, and launch install state.
-Authoritative user progress or account data must live in OS-appropriate user
-data directories, not primarily in the Steam application directory.
+The app root is disposable. Script-managed tools, caches, logs, receipts,
+content Library state, and build output live in Vapor User Data. The app root
+contains packaged binaries, launch/bootstrap scripts, documentation, and the
+default App payload.

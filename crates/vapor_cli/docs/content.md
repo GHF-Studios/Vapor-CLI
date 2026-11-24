@@ -1,12 +1,12 @@
 # Content lifecycle
 
-Vapor content commands manage Workshop-backed runtime content from the Steam
-installation/app root. Source stays outside the app root; installed content is
-runtime material, not a Git checkout.
+Vapor content commands manage Workshop-backed runtime content in Vapor User
+Data. Source stays outside the app root; installed content is runtime material,
+not a Git checkout. The Steam app ships only the read-only default App bundle.
 
-## App-root layout
+## Vapor User Data layout
 
-Generated content state uses this app-owned layout:
+Generated content state uses this Vapor-owned layout:
 
 ```text
 content/
@@ -20,7 +20,7 @@ output/content/
 ├── packages/                    staged deployable artifact roots
 └── scripts/                     Workshop provider VDF previews
 
-.vapor/state/content/
+state/content/
 ├── index.toml                   installed/cache index
 ├── locks/                       per-artifact resolved install records
 ├── selection.toml                selected packagepack

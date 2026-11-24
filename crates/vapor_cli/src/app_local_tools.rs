@@ -1,8 +1,8 @@
-//! App-local tool readiness inspection.
+//! Vapor-owned developer tool readiness inspection.
 //!
 //! Source-visible setup scripts own installation, uninstallation, player-mode
 //! bootstrap, and developer-environment upgrade/downgrade. Vapor Shell only
-//! inspects the resulting app-local tools so command preflight can point at the
+//! inspects the resulting User Data tools so command preflight can point at the
 //! script layer without mutating the Steam app root.
 
 use crate::{cross_toolchain, discovery::InstallationPaths};
@@ -104,9 +104,9 @@ impl AppToolStatus {
     }
 }
 
-/// Inspect script-managed app-local tools.
+/// Inspect script-managed Vapor User Data tools.
 pub fn inspect(installation: &InstallationPaths) -> AppToolStatus {
-    inspect_root(installation.root())
+    inspect_root(installation.user_data_root())
 }
 
 /// Require selected tools without attempting installation.
@@ -142,7 +142,7 @@ pub fn require_status(
         return Ok(());
     }
     Err(format!(
-        "cannot {action}: the app-local {} {} not installed\n{}\nhelp: player-mode tooling uses `rust-script --force <app-root>/resources/vapor/tools/production/app_setup/setup_player.rs`\nhelp: development tooling uses `rust-script --force <app-root>/resources/vapor/tools/production/app_setup/setup_development.rs`\nnote: this command will not install prerequisites automatically",
+        "cannot {action}: the Vapor User Data {} {} not installed\n{}\nhelp: run `vapor-installer dev-env install`\nnote: this command will not install prerequisites automatically",
         missing
             .iter()
             .map(|requirement| requirement.label())
@@ -153,10 +153,10 @@ pub fn require_status(
     ))
 }
 
-fn inspect_root(root: &Path) -> AppToolStatus {
-    let rustup = root.join("rustup/bin").join(executable("rustup"));
-    let toolchains = root.join("rustup-home/toolchains");
-    let (rust_bin, rust_missing) = inspect_rust(&toolchains, Some(root));
+fn inspect_root(tools_root: &Path) -> AppToolStatus {
+    let rustup = tools_root.join("rustup/bin").join(executable("rustup"));
+    let toolchains = tools_root.join("rustup-home/toolchains");
+    let (rust_bin, rust_missing) = inspect_rust(&toolchains, Some(tools_root));
     let mut missing = rust_missing;
     if !is_executable(&rustup) {
         missing.push(format!("rustup (expected at {})", rustup.display()));
@@ -168,7 +168,7 @@ fn inspect_root(root: &Path) -> AppToolStatus {
         missing,
     };
 
-    let steam_path = steam_executable(root);
+    let steam_path = steam_executable(tools_root);
     let steam_installed = is_executable(&steam_path);
     let steamcmd = AppToolComponentStatus {
         label: "SteamCMD",
@@ -181,7 +181,7 @@ fn inspect_root(root: &Path) -> AppToolStatus {
         },
     };
 
-    let cross_status = cross_toolchain::inspect(root);
+    let cross_status = cross_toolchain::inspect(tools_root);
     let cross = AppToolComponentStatus {
         label: "Zig/Cross",
         installed: cross_status.installed,
@@ -299,7 +299,6 @@ fn is_healthy_executable(path: &Path, root: &Path) -> bool {
     is_executable(path)
         && Command::new(path)
             .arg("--version")
-            .env("VAPOR_HOME", root)
             .env("CARGO_HOME", root.join("cargo-home"))
             .env("RUSTUP_HOME", root.join("rustup-home"))
             .output()

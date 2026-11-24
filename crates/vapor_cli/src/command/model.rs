@@ -177,6 +177,8 @@ pub enum LaunchCommand {
     Default,
     /// Launch the composition selected in Studio through Client.
     Selected,
+    /// Launch the immutable default Packagepack shipped with this Steam app.
+    BundledDefault,
 }
 
 #[derive(Debug, Subcommand)]
@@ -184,6 +186,11 @@ pub enum LaunchCommand {
 pub enum CompositionCommand {
     /// List compositions and their local installation state from the shared service.
     List,
+    /// Select the composition Steam Play will launch.
+    Select {
+        /// Existing composition ID shown by `composition list`.
+        composition_id: String,
+    },
     /// Install the composition's exact resolved content graph.
     Install {
         /// ID shown by the composition list in Studio.
@@ -217,6 +224,7 @@ impl CompositionCommand {
         match self {
             Self::List => None,
             Self::Install { composition_id }
+            | Self::Select { composition_id }
             | Self::Verify { composition_id }
             | Self::Repair { composition_id }
             | Self::Update { composition_id }
@@ -228,6 +236,7 @@ impl CompositionCommand {
     pub fn operation_name(&self) -> &'static str {
         match self {
             Self::List => "list",
+            Self::Select { .. } => "select",
             Self::Install { .. } => "install",
             Self::Verify { .. } => "verify",
             Self::Repair { .. } => "repair",

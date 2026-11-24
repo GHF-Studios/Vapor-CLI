@@ -2,7 +2,7 @@
 //!
 //! The Steam-facing launch path crosses native entrypoints, shell/batch
 //! scripts, Vapor Installer, and Vapor Shell. Cross-process status that must be
-//! visible after bootstrap belongs in app-local state, not ambient environment
+//! visible after bootstrap belongs in Vapor User Data, not ambient environment
 //! variables.
 
 use std::{
@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const BOOTSTRAP_FAILURE: &str = ".vapor/state/installer/bootstrap-failure.txt";
+const BOOTSTRAP_FAILURE: &str = "state/installer/bootstrap-failure.txt";
 
 pub(crate) struct InstallerBootstrapFailure {
     message: String,
@@ -27,8 +27,10 @@ impl InstallerBootstrapFailure {
     }
 }
 
-pub(crate) fn installer_bootstrap_failure(app_root: &Path) -> Option<InstallerBootstrapFailure> {
-    let source = fs::read_to_string(app_root.join(BOOTSTRAP_FAILURE)).ok()?;
+pub(crate) fn installer_bootstrap_failure(
+    user_data_root: &Path,
+) -> Option<InstallerBootstrapFailure> {
+    let source = fs::read_to_string(user_data_root.join(BOOTSTRAP_FAILURE)).ok()?;
     let mut lines = source.lines();
     let message = lines.next()?.trim();
     if message.is_empty() {

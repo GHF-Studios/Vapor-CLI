@@ -79,11 +79,10 @@ needs one.
 
 ### `launch default`
 
-Launch the app manifest's default playable composition through the shared
-Vapor Client service. If its default Packagepack has not yet been recorded in
-the composition, the service resolves the app's `default` Packagepack seed.
-The service owns dependency acquisition, installation state, verification, and
-the game handoff. Workshop acquisition uses the signed-in Steam client account.
+Launch the persistently selected playable composition through the shared
+Vapor Client service. On a fresh install, the default composition resolves the
+depot-owned Packagepack, Engine, and Game without Workshop acquisition. User
+selections and their installed Workshop content remain in Vapor User Data.
 
 ### `launch selected`
 
@@ -91,7 +90,7 @@ Launch the composition selected in Studio through the same service, without
 changing selection. If no playable composition is selected, open Studio and
 choose one first.
 
-### `composition list` and `composition <install|verify|repair|update|launch> COMPOSITION_ID`
+### `composition list` and `composition <select|install|verify|repair|update|launch> COMPOSITION_ID`
 
 List playable compositions and their install state, or run a lifecycle operation
 on one through the shared Client service. The list marks the active composition.
@@ -102,6 +101,7 @@ launch handoff; the CLI does not implement a second content installer.
 
 ```text
 vapor composition list
+vapor composition select default
 vapor composition install composition-1
 vapor composition verify composition-1
 vapor composition repair composition-1
@@ -346,7 +346,7 @@ status, and the state of the files Vapor manages.
 ### `ide repair [--dry-run]`
 
 Write project-local IDE settings for the active source root so RustRover can
-see app-local Rust/Cargo and routed Cargo workspaces.
+see Vapor-owned Rust/Cargo in User Data and routed Cargo workspaces.
 
 The current first pass manages only files under the selected source root's
 `.idea` directory:
@@ -354,7 +354,7 @@ The current first pass manages only files under the selected source root's
 - `.idea/cargoProjects.xml` for routed Cargo workspace manifests;
 - `.idea/rust.xml` for the Rust/Cargo path and stdlib source path when
   packaged;
-- `.idea/vapor.xml` for Vapor-owned app-root, Cargo home, rustup home, Cargo,
+- `.idea/vapor.xml` for app-root identity, Vapor User Data Cargo/rustup homes, Cargo,
   rustc, rustup, Git, and source identity metadata.
 
 `--dry-run` previews which project-local files would be written without
@@ -401,9 +401,10 @@ Build and refresh the local Steam app root using Cargo's optimized release
 profile, assemble the clean allowlisted
 split-depot app payload, and smoke-check the staged package without invoking
 SteamCMD. The default root payload is runtime-only: the common depot carries
-`App.vapor.toml`, `docs/`, app scripts, and packaged examples; platform depots
-carry selected `bin/<target>/` application binaries, including
-`vapor-entrypoint[.exe]`, and target-matching `bin/vapor-launch.*` scripts.
+`App.vapor.toml`, `docs/`, app scripts, packaged examples, and the shared
+default App manifests/assets; platform depots carry selected `bin/<target>/`
+application binaries, the target-matching default Packagepack binary, and
+`bin/vapor-launch.*` scripts.
 
 When `[root.runtime].targets` is declared, omitting target flags stages that
 full matrix by default. Repeat `--target` to build and stage a deliberate
@@ -591,7 +592,7 @@ in the interactive shell. When `[workspace.runtime].targets` is declared,
 creation uses that matrix by default. Real creation rejects `--target` and
 `--host-only` and requires the declared matrix to contain Linux and Windows
 targets. It validates and builds that matrix before packaging and upload. Real
-creation preflight requires app-local Rust/Cargo, cross-build tooling, and
+creation preflight requires Vapor User Data Rust/Cargo, cross-build tooling, and
 SteamCMD. Repeat `--target` or use `--host-only` only for dry-run previews.
 
 ### `content publish ARTIFACT... [--target TARGET]... [--release-targets] [--host-only] [--dry-run] [--account ACCOUNT] [--change-note TEXT] [--yes]`
@@ -606,7 +607,7 @@ manifests, and must be typed manually in the interactive shell. When
 publishing packages that matrix by default. Real publication rejects `--target`
 and `--host-only` and requires the declared matrix to contain Linux and Windows
 targets. It validates and builds that matrix before packaging and upload.
-Real publication preflight requires app-local Rust/Cargo, cross-build tooling,
+Real publication preflight requires Vapor User Data Rust/Cargo, cross-build tooling,
 and SteamCMD. An artifact ID may omit its version only when it identifies one
 source project in the open workspace; use `ID@VERSION` when the ID has multiple
 versions. Repeat `--target` or use `--host-only` only for dry-run previews.
@@ -616,11 +617,11 @@ update per artifact, with all supported platform binaries and libraries inside
 that item. Steam Workshop beta-branch versioning is reserved for app-branch
 compatibility ranges, not for Linux-vs-Windows payload splitting.
 
-### `content delete ARTIFACT_OR_WORKSHOP_ID --dry-run`
+### `content delete WORKSHOP_ID [--dry-run] [--yes]`
 
-Record a safe preview of deleting or retiring a Workshop item. Real deletion is
-a SteamUGC authority-changing action and is refused unless a controlled
-SteamUGC provider implements it.
+Preview or delete one exact PublishedFileId through the authenticated SteamUGC
+client. Real deletion requires `--yes` and removes the published item for
+subscribers; it does not delete local source manifests.
 
 ## Scripts
 

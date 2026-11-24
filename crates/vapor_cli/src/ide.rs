@@ -274,12 +274,13 @@ fn vapor_xml(
     project_root: &Path,
 ) -> Result<String, String> {
     let root = paths.installation().root();
+    let tools_root = paths.installation().user_data_root();
     let cargo = paths
         .installation()
         .bundled_cargo()
         .ok_or_else(|| "cannot configure IDE: bundled Cargo is missing".to_owned())?;
     let rustc = app_tools.rust().path().join(executable("rustc"));
-    let rustup = root.join("rustup/bin").join(executable("rustup"));
+    let rustup = tools_root.join("rustup/bin").join(executable("rustup"));
     Ok(VAPOR_TEMPLATE
         .replace(
             "{{source_root}}",
@@ -289,11 +290,11 @@ fn vapor_xml(
         .replace("{{app_root}}", &xml_escape(&root.to_string_lossy()))
         .replace(
             "{{cargo_home}}",
-            &xml_escape(&root.join("cargo-home").to_string_lossy()),
+            &xml_escape(&tools_root.join("cargo-home").to_string_lossy()),
         )
         .replace(
             "{{rustup_home}}",
-            &xml_escape(&root.join("rustup-home").to_string_lossy()),
+            &xml_escape(&tools_root.join("rustup-home").to_string_lossy()),
         )
         .replace("{{cargo_path}}", &xml_escape(&cargo.to_string_lossy()))
         .replace("{{rustc_path}}", &xml_escape(&rustc.to_string_lossy()))

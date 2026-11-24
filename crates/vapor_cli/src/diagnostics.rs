@@ -16,6 +16,7 @@ use std::{
     sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
+use vapor_core::installation::VaporInstallation;
 
 static RUN: OnceLock<DiagnosticsRun> = OnceLock::new();
 
@@ -264,7 +265,25 @@ pub(crate) fn init_from_current_exe(options: CaptureOptions) {
     let installation_identity = installation
         .as_ref()
         .map(|installation| installation.identity_id().to_owned());
-    let Ok(run) = prepare_run(&app_root, &executable, options, args, installation_identity) else {
+    let user_data_root = installation
+        .as_ref()
+        .map(|installation| installation.user_data_root().to_path_buf())
+        .or_else(|| {
+            VaporInstallation::from_explicit_root(app_root.clone())
+                .ok()
+                .map(|installation| installation.user_data_root())
+        });
+    let Some(user_data_root) = user_data_root else {
+        return;
+    };
+    let Ok(run) = prepare_run(
+        &app_root,
+        &user_data_root,
+        &executable,
+        options,
+        args,
+        installation_identity,
+    ) else {
         return;
     };
     let run_id = run.local.run_id.clone();
@@ -445,7 +464,7 @@ pub(crate) fn finish(success: bool) {
 }
 
 pub(crate) fn local_directory(installation: &InstallationPaths) -> PathBuf {
-    diagnostics_dir(installation.root())
+    diagnostics_dir(installation.user_data_root())
 }
 
 pub(crate) fn current_run() -> Option<LocalRun> {
@@ -453,7 +472,7 @@ pub(crate) fn current_run() -> Option<LocalRun> {
 }
 
 pub(crate) fn latest_run(installation: &InstallationPaths) -> Option<LocalRun> {
-    latest_local_run(installation.root())
+    latest_local_run(installation.user_data_root())
 }
 
 pub(crate) fn auto_capture_enabled() -> bool {
@@ -480,7 +499,7 @@ pub(crate) fn upload(
         .ok_or_else(|| {
             format!(
                 "no diagnostics runs found in {}",
-                run_directory(installation.root()).display()
+                run_directory(installation.user_data_root()).display()
             )
         })?;
     let transport = transport::default_transport();
@@ -511,6 +530,7 @@ fn upload_local_run(
 
 fn prepare_run(
     app_root: &Path,
+    user_data_root: &Path,
     executable: &Path,
     options: CaptureOptions,
     args: Vec<String>,
@@ -526,7 +546,7 @@ fn prepare_run(
         sanitize_component(&platform),
         short_random
     );
-    let run_dir = run_directory(app_root).join(date).join(format!(
+    let run_dir = run_directory(user_data_root).join(date).join(format!(
         "{}-{}-{}",
         now.seconds,
         sanitize_component(&platform),
@@ -623,8 +643,8 @@ fn component_metadata(status: &app_local_tools::AppToolComponentStatus) -> Compo
     }
 }
 
-fn latest_local_run(app_root: &Path) -> Option<LocalRun> {
-    let latest = diagnostics_dir(app_root).join(LATEST_FILE);
+fn latest_local_run(user_data_root: &Path) -> Option<LocalRun> {
+    let latest = diagnostics_dir(user_data_root).join(LATEST_FILE);
     let mut source = String::new();
     File::open(&latest).ok()?.read_to_string(&mut source).ok()?;
     let latest: LatestMetadata = toml::from_str(&source).ok()?;
@@ -680,12 +700,12 @@ fn diagnostics_root_from_run_dir(run_dir: &Path) -> Option<&Path> {
     run_dir.parent()?.parent()?.parent()
 }
 
-fn diagnostics_dir(app_root: &Path) -> PathBuf {
-    app_root.join(".vapor/diagnostics")
+fn diagnostics_dir(user_data_root: &Path) -> PathBuf {
+    user_data_root.join("diagnostics")
 }
 
-fn run_directory(app_root: &Path) -> PathBuf {
-    diagnostics_dir(app_root).join("runs")
+fn run_directory(user_data_root: &Path) -> PathBuf {
+    diagnostics_dir(user_data_root).join("runs")
 }
 
 fn fallback_app_root(executable: &Path) -> Option<PathBuf> {

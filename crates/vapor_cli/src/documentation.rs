@@ -5,7 +5,7 @@ use std::{path::PathBuf, process::Command};
 
 /// Resolve an installed documentation section or the aggregate index.
 pub fn path(paths: &EnvironmentPaths, topic: Option<&str>) -> Result<PathBuf, String> {
-    let root = paths.installation().root().join("docs");
+    let root = paths.installation().user_data_root().join("docs");
     let candidate = topic.map_or_else(
         || root.join("index.html"),
         |name| root.join(name).join("index.html"),

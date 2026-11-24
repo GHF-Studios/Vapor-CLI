@@ -119,10 +119,8 @@ human-driven lifecycle work; scripts are the direct source-checkout command
 surface. The `installer` launch target opens the Installer GUI and falls back
 to the command-line recovery workflow if that GUI is unavailable.
 
-Player-mode install prepares only app-local basic runtime tooling:
-
-- SteamCMD under `tools/steamcmd`;
-- disposable app-local state, log, diagnostics run directories, and content-cache directories.
+Player setup prepares Vapor User Data state, log, diagnostics, and mutable
+content directories. SteamCMD is a developer/publisher tool in Vapor User Data.
 
 It does not install Rust/Cargo or cross-build toolchains. Development tooling is
 explicit:
@@ -144,11 +142,9 @@ verify, repair, update, or play. An empty composition starts at Workshop
 discovery instead of trying to launch a missing root.
 
 From Vapor Shell, `launch default` remains available as a CLI operation. It
-resolves the app manifest's default packagepack seed, installs that packagepack
-and its dependency closure when missing, reads the selected packagepack's
-declared dependency roles, resolves the required `engine` dependency by content
-ID, records any declared `game` dependency by content ID, and hands off to the
-resolved engine artifact's binary for the host runtime target.
+verifies and launches the depot-owned Packagepack, Engine, and Game closure
+without a Workshop download. A user-selected Workshop composition remains
+mutable Library content in Vapor User Data.
 
 Workshop downloads use anonymous SteamCMD by default. `--account ACCOUNT` exists
 for deliberately private app/content testing, not normal Play.
@@ -174,8 +170,8 @@ Release-mode depot builds should target every shipped app platform:
 root publish --dry-run
 ```
 
-The Windows GNU/LLVM target can be built from Linux with app-local llvm-mingw,
-and the Linux GNU target can be built from Windows with the app-local Zig
+The Windows GNU/LLVM target can be built from Linux with Vapor-owned llvm-mingw,
+and the Linux GNU target can be built from Windows with the Vapor-owned Zig
 cross-link wrapper model. If a target is built on another machine, preserve the same
 `bin/<target>/` and `output/dev/<workspace>/<target>/debug/` relative paths
 when copying artifacts back to the publishing app root.
