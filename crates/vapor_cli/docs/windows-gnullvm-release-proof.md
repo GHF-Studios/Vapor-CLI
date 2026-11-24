@@ -14,23 +14,28 @@ x86_64-pc-windows-gnullvm
 ## Steam launch
 
 Steam has two Windows launch options. Play Loo-Cast is the default and targets
-the native entrypoint shipped in the target-specific depot. Choose an app uses
-the same executable with `chooser` as its argument:
+the native entrypoint shipped in the target-specific depot. Create with Vapor
+uses the same executable with `creator` as its argument. This source change is
+not yet compiled, staged, or deployed to Steam:
 
 ```text
 Play Loo-Cast executable: bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe
 Play Loo-Cast arguments:  (empty)
-Choose an app executable: bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe
-Choose an app arguments:  chooser
+Create with Vapor executable: bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe
+Create with Vapor arguments:  creator
 ```
 
-The chooser contains Launcher, Studio, IDE, Installer, and Shell. The player
-does not need separate Steam launch options for each product.
+Creator starts the standalone Vapor chooser under Vapor User Data, or opens
+the Downloads page when Vapor is absent. That chooser contains Launcher,
+Studio, IDE, Installer, and Shell. The player does not need separate Steam
+launch options for each product.
 
 ## First-run installer
 
-Player-mode install is automatic through the launch path. For development
-build/proof work from a source checkout, run the script directly:
+Player launch does not install or initialize Vapor. Creating content requires
+the standalone Vapor installation; the Steam creator option opens its active
+chooser or the Downloads page. For development build/proof work from a source
+checkout, run the script directly:
 
 ```text
 rust-script tools\production\app_setup\setup_development.rs --app-root "C:\Program Files (x86)\Steam\steamapps\common\Loo Cast"

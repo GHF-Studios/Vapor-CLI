@@ -44,11 +44,13 @@ Current target shape:
 - **Direct terminal invocation** is valid when a developer or support person
   deliberately enters the app-root control surface.
 
-Steam exposes two stable app entries: Play Loo-Cast (default) and a product
-chooser. The chooser exposes Launcher, Studio, IDE, Installer, and Shell.
-Other maintenance and developer operations are initiated from those products,
-the interactive Shell, or terminal surfaces rather than gaining separate
-Steam launch-option entries.
+Steam exposes two stable app entries: Play Loo-Cast (default) and Create with
+Vapor. Play launches the packaged default composition directly. Create with
+Vapor hands off to the standalone Vapor chooser under Vapor User Data, or opens
+the Downloads page when no release is installed. Launcher, Studio, IDE,
+Installer, and Shell remain in that standalone chooser. Other maintenance and
+developer operations are initiated from those products or terminal surfaces
+rather than gaining separate Steam launch-option entries.
 
 ## Precompiled control-plane boundary
 
@@ -241,7 +243,7 @@ surfaces:
 - keep Rust scripts only where they are dev-only or materially safer than shell;
 - generate RustRover actions from the app-root/SuperWorkspace model and launch
   external Vapor terminals for most substantial operations;
-- keep Steam launch options to Play Loo-Cast (default) and the product chooser;
+- keep Steam launch options to Play Loo-Cast (default) and the standalone Vapor creator handoff;
 - treat SteamCMD player acquisition as temporary provider plumbing, not product
   language;
 - remove "publish preview" as a named workflow in favor of `publish --dry-run`;
