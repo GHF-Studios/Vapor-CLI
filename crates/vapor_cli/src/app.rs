@@ -39,6 +39,14 @@ struct Startup {
 /// manifest validation, or initial state construction fails.
 pub fn run() -> Result<(), String> {
     let startup = parse_startup()?;
+    if let StartupMode::Direct(ShellCommand::Root {
+        command: command @ RootCommand::StageStandalone { .. },
+    }) = &startup.mode
+    {
+        let source_root = std::env::current_dir()
+            .map_err(|error| format!("failed to resolve the invocation directory: {error}"))?;
+        return command::execute_standalone_stage_from_source(command, &source_root);
+    }
     if matches!(startup.mode, StartupMode::Exit) {
         return Ok(());
     }

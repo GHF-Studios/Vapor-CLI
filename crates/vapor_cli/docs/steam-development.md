@@ -93,27 +93,29 @@ Branches remain build channels. Keep `vapor-dev` as the development beta branch
 for uploaded test builds. Add more branches only when there is a concrete build
 promotion need, such as a stable alpha branch distinct from internal dev.
 
-The depot must include `vapor-entrypoint[.exe]`, `vapor-gui[.exe]`,
-`vapor-launcher[.exe]`, `vapor-studio[.exe]`, `vapor-ide[.exe]`,
-`vapor-installer-gui[.exe]`, and `vapor-installer[.exe]` under `bin/<target>`;
-the Vapor Shell binary is also required for the Shell route. The target Steam
-configuration has two options:
+The depot keeps the small player runtime: `vapor-entrypoint[.exe]`,
+`vapor[.exe]` for launching the bundled default composition, and
+`vapor-client-service[.exe]` for the shared client bootstrap, plus the runtime
+libraries those binaries need. Creator GUIs, CLI installer, and Shell are
+provided by the separate Vapor installation and are excluded from Steam depots.
+The target Steam configuration has two user-facing options:
 
 - **Play Loo-Cast (default)**: native entrypoint executable with no arguments.
   This launches the default composition through Vapor Client.
-- **Choose an app**: the same executable with `chooser` as its argument. This
-  opens the product chooser for Launcher, Studio, IDE, Installer, and Shell.
+- **Create with Vapor**: the same executable with `creator` as its argument.
+  This starts the active standalone Vapor release under Vapor User Data, or
+  opens the Homepage Downloads page when no release is installed. The bundled
+  `chooser` remains a local development and recovery route.
 
-The entrypoint dispatches those choices to separate Launcher, Studio, IDE, and
-Installer GUI executables, all built from the shared Vapor-GUI host. Installer
-falls back to the precompiled bootstrap if its GUI is missing. Shell opens a
-terminal. These are the two supported Steam launch settings for both target
-depots.
+The standalone release's entrypoint dispatches its chooser to separate
+Launcher, Studio, IDE, and Installer GUI executables, all built from the shared
+Vapor-GUI host. Steam's depot does not carry those creator tools. These are the
+two supported Steam launch settings for both target depots.
 
 | Option | Linux | Windows |
 | --- | --- | --- |
 | Play Loo-Cast (default) | `bin/x86_64-unknown-linux-gnu/vapor-entrypoint` (no arguments) | `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe` (no arguments) |
-| Choose an app | `bin/x86_64-unknown-linux-gnu/vapor-entrypoint chooser` | `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe chooser` |
+| Create with Vapor | `bin/x86_64-unknown-linux-gnu/vapor-entrypoint creator` | `bin\x86_64-pc-windows-gnullvm\vapor-entrypoint.exe creator` |
 Running `vapor-installer` without arguments prints shim help/status for
 human-driven lifecycle work; scripts are the direct source-checkout command
 surface. The `installer` launch target opens the Installer GUI and falls back
@@ -136,10 +138,9 @@ reinstalling the Steam app is the preferred recovery because the app root is
 disposable and should not hold authoritative user data.
 
 The default Steam **Play Loo-Cast** launch target starts the default playable
-composition. The separate chooser opens the dedicated Vapor Launcher, which
-lists compositions and offers service-derived actions: find a game, install,
-verify, repair, update, or play. An empty composition starts at Workshop
-discovery instead of trying to launch a missing root.
+composition. **Create with Vapor** hands off to the standalone Vapor chooser,
+which opens Launcher, Studio, IDE, Installer, or Shell. An empty composition
+starts at Workshop discovery instead of trying to launch a missing root.
 
 From Vapor Shell, `launch default` remains available as a CLI operation. It
 verifies and launches the depot-owned Packagepack, Engine, and Game closure

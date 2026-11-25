@@ -40,6 +40,8 @@ impl std::str::FromStr for ProjectSelection {
 /// Supported Cargo operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CargoWorkflow {
+    /// Refresh Cargo.lock from Vapor's local registry cache.
+    ResolveLockfile,
     /// Apply Rustfmt.
     Fmt,
     /// Type-check all workspace targets.
@@ -57,6 +59,7 @@ pub enum CargoWorkflow {
 impl CargoWorkflow {
     pub(crate) fn label(self) -> &'static str {
         match self {
+            Self::ResolveLockfile => "resolve-lockfile",
             Self::Fmt => "fmt",
             Self::Check => "check",
             Self::Test => "test",

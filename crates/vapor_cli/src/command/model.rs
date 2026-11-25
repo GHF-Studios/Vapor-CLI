@@ -92,6 +92,13 @@ pub enum ShellCommand {
         project: ProjectSelection,
     },
 
+    /// Refresh Cargo.lock through Vapor-managed Cargo using only the local cache.
+    ResolveLockfile {
+        /// Cargo workspace name to refresh, or `all`.
+        #[arg(long, value_name = "PROJECT", default_value = "all")]
+        project: ProjectSelection,
+    },
+
     /// Clear the active workspace's Vapor-managed development build caches.
     Clean,
 
@@ -465,6 +472,18 @@ pub enum RootCommand {
         #[arg(long)]
         release_targets: bool,
         /// Build only Cargo's host target for a local smoke pass.
+        #[arg(long)]
+        host_only: bool,
+    },
+    /// Stage release outputs as a standalone Vapor app under Vapor User Data.
+    StageStandalone {
+        /// Rust target triple to include. May be repeated.
+        #[arg(long, value_name = "TARGET")]
+        target: Vec<String>,
+        /// Stage the manifest runtime target matrix. This is the default when declared.
+        #[arg(long)]
+        release_targets: bool,
+        /// Stage only Cargo's host target for a local smoke pass.
         #[arg(long)]
         host_only: bool,
     },

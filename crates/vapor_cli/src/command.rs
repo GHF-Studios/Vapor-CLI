@@ -55,6 +55,13 @@ pub fn execute(command: ShellCommand, state: &mut ShellState) -> Result<Control,
     execute_body(command, state)
 }
 
+pub(crate) fn execute_standalone_stage_from_source(
+    command: &RootCommand,
+    source_root: &std::path::Path,
+) -> Result<(), String> {
+    root_commands::execute_standalone_stage_from_source(command, source_root)
+}
+
 fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control, String> {
     match command {
         ShellCommand::Launch {
@@ -105,6 +112,9 @@ fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control
         ShellCommand::Test { project } => execute_workflow(CargoWorkflow::Test, project, state)?,
         ShellCommand::Build { project } => {
             execute_workflow(CargoWorkflow::Build, project, state)?;
+        }
+        ShellCommand::ResolveLockfile { project } => {
+            execute_workflow(CargoWorkflow::ResolveLockfile, project, state)?;
         }
         ShellCommand::Clean => execute_clean_workspace(state)?,
         ShellCommand::Validate { project } => {
@@ -244,6 +254,7 @@ pub(super) fn execute_workspace_tool(
     target_triples: &[String],
 ) -> Result<Option<vapor_client_protocol::OperationEvent>, String> {
     let operation = match workflow {
+        CargoWorkflow::ResolveLockfile => WorkspaceToolOperation::ResolveLockfile,
         CargoWorkflow::Fmt => WorkspaceToolOperation::Format,
         CargoWorkflow::Check => WorkspaceToolOperation::Check,
         CargoWorkflow::Test => WorkspaceToolOperation::Test,
@@ -305,6 +316,7 @@ fn workflow_next_command(
     manifest: &WorkspaceManifest,
 ) -> &'static str {
     match (manifest.kind(), workspace_has_content(paths), command) {
+        (_, _, CargoWorkflow::ResolveLockfile) => "build",
         (_, _, CargoWorkflow::Fmt) => "test",
         (_, _, CargoWorkflow::Check) => "test",
         (_, _, CargoWorkflow::Test) => "validate",

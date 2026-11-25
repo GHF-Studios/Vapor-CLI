@@ -211,6 +211,8 @@ enum WorkspaceManageCommand {
     Status,
     /// Create or update SDK-managed workspace structure.
     Sync,
+    /// Refresh Cargo.lock from Vapor's local Cargo cache without network access.
+    ResolveLockfile,
 }
 
 impl WorkspaceManageCommand {
@@ -218,6 +220,7 @@ impl WorkspaceManageCommand {
         match self {
             Self::Status => core::WorkspaceCommand::Status,
             Self::Sync => core::WorkspaceCommand::Sync,
+            Self::ResolveLockfile => core::WorkspaceCommand::ResolveLockfile,
         }
     }
 }
