@@ -92,6 +92,13 @@ pub enum ShellCommand {
         project: ProjectSelection,
     },
 
+    /// Refresh Cargo.lock through Vapor-managed Cargo using only the local cache.
+    ResolveLockfile {
+        /// Cargo workspace name to refresh, or `all`.
+        #[arg(long, value_name = "PROJECT", default_value = "all")]
+        project: ProjectSelection,
+    },
+
     /// Clear the active workspace's Vapor-managed development build caches.
     Clean,
 

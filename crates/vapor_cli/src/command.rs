@@ -106,6 +106,9 @@ fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control
         ShellCommand::Build { project } => {
             execute_workflow(CargoWorkflow::Build, project, state)?;
         }
+        ShellCommand::ResolveLockfile { project } => {
+            execute_workflow(CargoWorkflow::ResolveLockfile, project, state)?;
+        }
         ShellCommand::Clean => execute_clean_workspace(state)?,
         ShellCommand::Validate { project } => {
             execute_workflow(CargoWorkflow::Validate, project, state)?;
@@ -244,6 +247,7 @@ pub(super) fn execute_workspace_tool(
     target_triples: &[String],
 ) -> Result<Option<vapor_client_protocol::OperationEvent>, String> {
     let operation = match workflow {
+        CargoWorkflow::ResolveLockfile => WorkspaceToolOperation::ResolveLockfile,
         CargoWorkflow::Fmt => WorkspaceToolOperation::Format,
         CargoWorkflow::Check => WorkspaceToolOperation::Check,
         CargoWorkflow::Test => WorkspaceToolOperation::Test,
@@ -305,6 +309,7 @@ fn workflow_next_command(
     manifest: &WorkspaceManifest,
 ) -> &'static str {
     match (manifest.kind(), workspace_has_content(paths), command) {
+        (_, _, CargoWorkflow::ResolveLockfile) => "build",
         (_, _, CargoWorkflow::Fmt) => "test",
         (_, _, CargoWorkflow::Check) => "test",
         (_, _, CargoWorkflow::Test) => "validate",

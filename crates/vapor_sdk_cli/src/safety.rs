@@ -157,7 +157,9 @@ impl SafetyPolicy {
                 confirm: true,
             },
             SdkCommand::Toolchain(ToolchainCommand::Install | ToolchainCommand::Repair)
-            | SdkCommand::Workspace(WorkspaceCommand::Deploy) => Self {
+            | SdkCommand::Workspace(
+                WorkspaceCommand::Deploy | WorkspaceCommand::ResolveLockfile,
+            ) => Self {
                 force: false,
                 strict: false,
                 keep_unused_versions: false,
