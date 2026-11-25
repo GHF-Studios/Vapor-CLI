@@ -55,6 +55,13 @@ pub fn execute(command: ShellCommand, state: &mut ShellState) -> Result<Control,
     execute_body(command, state)
 }
 
+pub(crate) fn execute_standalone_stage_from_source(
+    command: &RootCommand,
+    source_root: &std::path::Path,
+) -> Result<(), String> {
+    root_commands::execute_standalone_stage_from_source(command, source_root)
+}
+
 fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control, String> {
     match command {
         ShellCommand::Launch {

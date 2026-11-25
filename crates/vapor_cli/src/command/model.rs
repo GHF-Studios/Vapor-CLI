@@ -475,6 +475,18 @@ pub enum RootCommand {
         #[arg(long)]
         host_only: bool,
     },
+    /// Stage release outputs as a standalone Vapor app under Vapor User Data.
+    StageStandalone {
+        /// Rust target triple to include. May be repeated.
+        #[arg(long, value_name = "TARGET")]
+        target: Vec<String>,
+        /// Stage the manifest runtime target matrix. This is the default when declared.
+        #[arg(long)]
+        release_targets: bool,
+        /// Stage only Cargo's host target for a local smoke pass.
+        #[arg(long)]
+        host_only: bool,
+    },
     /// Promote already-built root application outputs into the local app root.
     Deploy {
         /// Skip rebuilding installed documentation.

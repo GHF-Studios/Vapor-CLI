@@ -10,9 +10,50 @@ use crate::{
     distribution::StageOptions,
     metadata::{ResolvedMetadata, ValidationPlan},
     workflow::CargoWorkflow,
+    workspace::WorkspaceManifest,
 };
-use std::time::{Duration, Instant};
+use std::{
+    path::Path,
+    time::{Duration, Instant},
+};
 use vapor_client_protocol::{ClientAction, ClientEvent, ProtocolFrame, PublishingAction};
+
+pub(super) fn execute_standalone_stage_from_source(
+    command: &RootCommand,
+    source_root: &Path,
+) -> Result<(), String> {
+    let RootCommand::StageStandalone {
+        target,
+        release_targets,
+        host_only,
+    } = command
+    else {
+        return Err("standalone release staging requires `root stage-standalone`".to_owned());
+    };
+    let workspace_manifest = WorkspaceManifest::load_from_source_root(source_root)?;
+    let targets =
+        super::resolve_runtime_targets(&workspace_manifest, target, *release_targets, *host_only)?;
+    let user_data_root = vapor_core::product_layout::user_data_root()
+        .ok_or_else(|| "could not resolve the canonical Vapor User Data location".to_owned())?;
+    let output_root = user_data_root.join("output");
+    let (staged_root, promoted) =
+        vapor_client_provider::standalone_release::stage_standalone_release(
+            source_root,
+            &output_root,
+            &user_data_root,
+            &workspace_manifest,
+            &targets,
+        )?;
+    println!(
+        "Staged {promoted} release artifact(s) for [{}] at {}.",
+        targets.join(", "),
+        staged_root.display()
+    );
+    println!(
+        "This did not deploy into an App Instance. Package the staged root with `release/package-vapor-standalone-archive.sh`."
+    );
+    Ok(())
+}
 
 pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(), String> {
     let metadata = ResolvedMetadata::resolve(state);
@@ -39,6 +80,34 @@ pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(
             run_root_workflow_targets(state, workflow, &targets)?;
             println!(
                 "hint: deploy built app outputs with `root deploy`, package with `root package`, or publish with `root publish`"
+            );
+        }
+        RootCommand::StageStandalone {
+            target,
+            release_targets,
+            host_only,
+        } => {
+            metadata
+                .validate(&ValidationPlan::new("stage a standalone Vapor release").workspace())?;
+            let workspace_manifest = metadata.workspace_manifest()?;
+            let targets =
+                resolve_runtime_targets(workspace_manifest, &target, release_targets, host_only)?;
+            let active_paths = state.active_paths()?;
+            let (staged_root, promoted) =
+                vapor_client_provider::standalone_release::stage_standalone_release(
+                    active_paths.source().root(),
+                    &active_paths.installation().output_root(),
+                    active_paths.installation().user_data_root(),
+                    workspace_manifest,
+                    &targets,
+                )?;
+            println!(
+                "Staged {promoted} release artifact(s) for [{}] at {}.",
+                targets.join(", "),
+                staged_root.display()
+            );
+            println!(
+                "This did not deploy into the active app root. Package the staged root with `release/package-vapor-standalone-archive.sh`."
             );
         }
         RootCommand::Deploy {

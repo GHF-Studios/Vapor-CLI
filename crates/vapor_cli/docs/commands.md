@@ -376,7 +376,8 @@ omitting target flags builds that full runtime matrix by default. Repeat
 
 `root build` does not refresh installed app binaries, docs, Vapor scripts, or
 launch scripts. Use `root deploy` to promote already-built app outputs into the
-local Steam/app root.
+active app root, or `root stage-standalone` to assemble a separate Vapor-only
+release root under Vapor User Data without changing the active installation.
 
 `--release-targets` is an explicit spelling of the manifest target-matrix
 default; it does not select Cargo's release profile. Use `--host-only` for a
@@ -394,6 +395,23 @@ When `[root.runtime].targets` is declared, omitting target flags deploys that
 full runtime matrix by default. Repeat `--target` to deploy an explicit custom
 subset. Use `--host-only` for a local host-only deploy. Use `--skip-docs` for a
 faster binary/script refresh.
+
+### `root stage-standalone [--target TARGET]... [--release-targets] [--host-only]`
+
+Copy already-built release outputs into a fresh standalone Vapor app root at
+the inferred Vapor output root at `standalone/release`. Inside an active Vapor
+session, the output and User Data roots come from the selected installation;
+from a source checkout without an App Instance, Vapor uses its canonical
+per-user product layout. The stage contains selected runtime binaries,
+required runtime libraries, Vapor launch scripts, tools, the Vapor-only app
+manifest, and the canonical Vapor workspace toolchain pin. It does not write
+to the active app root or invoke Cargo. Re-run it to replace the previous
+standalone stage. Pass this directory to
+`release/package-vapor-standalone-archive.sh` to create a release archive.
+
+When `[root.runtime].targets` is declared, omitting target flags stages that
+full runtime matrix by default. Use `--target` for a deliberate subset or
+`--host-only` for a local staging pass.
 
 ### `root package [--target TARGET]... [--release-targets] [--host-only]`
 
