@@ -33,14 +33,9 @@ pub(super) fn execute_standalone_stage_from_source(
     let workspace_manifest = WorkspaceManifest::load_from_source_root(source_root)?;
     let targets =
         super::resolve_runtime_targets(&workspace_manifest, target, *release_targets, *host_only)?;
-    let user_data_root = vapor_core::product_layout::user_data_root()
-        .ok_or_else(|| "could not resolve the canonical Vapor User Data location".to_owned())?;
-    let output_root = user_data_root.join("output");
     let (staged_root, promoted) =
         vapor_client_provider::standalone_release::stage_standalone_release(
             source_root,
-            &output_root,
-            &user_data_root,
             &workspace_manifest,
             &targets,
         )?;
@@ -96,8 +91,6 @@ pub(super) fn execute_root(command: RootCommand, state: &ShellState) -> Result<(
             let (staged_root, promoted) =
                 vapor_client_provider::standalone_release::stage_standalone_release(
                     active_paths.source().root(),
-                    &active_paths.installation().output_root(),
-                    active_paths.installation().user_data_root(),
                     workspace_manifest,
                     &targets,
                 )?;
