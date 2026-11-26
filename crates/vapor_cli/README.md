@@ -27,6 +27,11 @@ executable. Source roots are opened explicitly by path or app-local registered
 name, and the last active source is remembered in Vapor User Data. Interactive
 filesystem navigation is confined to the opened source root.
 
+Vapor can also request temporary Platform SSH access with
+`platform ssh request`. The default Ed25519 identity is stored under
+`Vapor User Data/ssh/`; Identity confirms the exact request before Platform
+receives it, and a separate root approval is still required for a grant.
+
 The product model also distinguishes a third concept: a Vapor application
 source root such as Vapor-Root. That is source for building the Steam app/depot,
 not the installed Steam directory itself.

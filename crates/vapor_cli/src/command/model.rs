@@ -151,6 +151,13 @@ pub enum ShellCommand {
         command: ProviderCommand,
     },
 
+    /// Request temporary SSH access to the Vapor Platform host.
+    Platform {
+        /// Platform operation.
+        #[command(subcommand)]
+        command: PlatformCommand,
+    },
+
     /// Open or inspect tools managed by the pinned Vapor toolchain.
     Toolchain {
         /// Toolchain operation.
@@ -186,6 +193,37 @@ pub enum LaunchCommand {
     Selected,
     /// Launch the immutable default Packagepack shipped with this Steam app.
     BundledDefault,
+}
+
+#[derive(Debug, Subcommand)]
+/// Operations on Vapor Platform.
+pub enum PlatformCommand {
+    /// Temporary SSH access operations.
+    Ssh {
+        #[command(subcommand)]
+        /// SSH operation to perform.
+        command: PlatformSshCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+/// SSH access request operations.
+pub enum PlatformSshCommand {
+    /// Request temporary SSH access after confirming the request in Identity.
+    Request {
+        /// Why temporary access is needed.
+        #[arg(long)]
+        purpose: String,
+        /// Requested capability (repeat to request multiple capabilities).
+        #[arg(long = "capability", required = true)]
+        capability: Vec<String>,
+        /// Requested duration in hours (1–8).
+        #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u8).range(1..=8))]
+        duration_hours: u8,
+        /// Existing OpenSSH private identity; defaults to Vapor User Data/ssh/platform_ed25519.
+        #[arg(long)]
+        identity_file: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -756,4 +794,84 @@ pub enum ScriptCommand {
         #[arg(long)]
         dry_run: bool,
     },
+}
+
+#[cfg(test)]
+mod platform_ssh_parse_tests {
+    use super::{PlatformCommand, PlatformSshCommand, ShellCommand};
+    use clap::Parser;
+    use std::path::PathBuf;
+
+    fn request(args: &[&str]) -> PlatformSshCommand {
+        match ShellCommand::try_parse_from(args).expect("valid request") {
+            ShellCommand::Platform {
+                command: PlatformCommand::Ssh { command },
+            } => command,
+            other => panic!("expected platform ssh command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn request_defaults_to_one_hour() {
+        match request(&[
+            "vapor",
+            "platform",
+            "ssh",
+            "request",
+            "--purpose",
+            "debug host",
+            "--capability",
+            "vapor_deploy",
+        ]) {
+            PlatformSshCommand::Request { duration_hours, .. } => assert_eq!(duration_hours, 1),
+        }
+    }
+
+    #[test]
+    fn request_accepts_repeated_capabilities_and_identity_override() {
+        match request(&[
+            "vapor",
+            "platform",
+            "ssh",
+            "request",
+            "--purpose",
+            "inspect release config",
+            "--capability",
+            "vapor_deploy",
+            "--capability",
+            "vapor_service_control",
+            "--identity-file",
+            "/tmp/test_identity",
+        ]) {
+            PlatformSshCommand::Request {
+                capability,
+                identity_file,
+                ..
+            } => {
+                assert_eq!(capability, ["vapor_deploy", "vapor_service_control"]);
+                assert_eq!(identity_file, Some(PathBuf::from("/tmp/test_identity")));
+            }
+        }
+    }
+
+    #[test]
+    fn request_rejects_duration_outside_server_policy() {
+        for hours in ["0", "9", "255"] {
+            assert!(
+                ShellCommand::try_parse_from([
+                    "vapor",
+                    "platform",
+                    "ssh",
+                    "request",
+                    "--purpose",
+                    "inspect",
+                    "--capability",
+                    "vapor_deploy",
+                    "--duration-hours",
+                    hours,
+                ])
+                .is_err()
+            );
+        }
+    }
 }

@@ -26,6 +26,7 @@ pub(crate) use client_commands::{
 pub(crate) use source_commands::active_source_root;
 mod content_commands;
 mod model;
+mod platform_ssh;
 mod root_commands;
 mod source_commands;
 pub use model::*;
@@ -126,6 +127,24 @@ fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control
         ShellCommand::Content { command } => content_commands::execute_content(command, state)?,
         ShellCommand::Script { command } => execute_script_command(command, state)?,
         ShellCommand::Provider { command } => execute_provider(command, state)?,
+        ShellCommand::Platform { command } => match command {
+            PlatformCommand::Ssh { command } => match command {
+                PlatformSshCommand::Request {
+                    purpose,
+                    capability,
+                    duration_hours,
+                    identity_file,
+                } => {
+                    platform_ssh::execute_platform_ssh_request(
+                        &purpose,
+                        &capability,
+                        duration_hours,
+                        identity_file.as_deref(),
+                        state,
+                    )?;
+                }
+            },
+        },
         ShellCommand::Sdk { args } => {
             let arguments = std::iter::once(std::ffi::OsString::from("vapor sdk")).chain(args);
             vapor_sdk_cli::run(arguments)?;
