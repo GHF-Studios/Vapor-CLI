@@ -1851,6 +1851,7 @@ dependencies = [
  "serde_json",
  "vapor_client_domain",
  "vapor_client_protocol",
+ "vapor_product_layout",
  "widestring",
  "windows-sys 0.61.2",
 ]
@@ -1930,6 +1931,7 @@ dependencies = [
 name = "vapor_product_layout"
 version = "0.5.0"
 dependencies = [
+ "semver",
  "windows-sys 0.61.2",
 ]
 

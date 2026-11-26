@@ -19,8 +19,12 @@ Vapor User Data
 ├── state/, logs/, diagnostics/
 ├── content/                         mutable Workshop artifacts
 ├── output/                          disposable build and staging
-├── cargo-home/, rustup-home/, rustup/
-└── tools/                           SteamCMD and cross toolchains
+├── cache/build/                      Vapor-managed Cargo target outputs
+└── tools/
+    ├── cargo/home/
+    ├── rustup/{bin,home}/
+    ├── steamcmd/
+    └── cross-toolchains
 ```
 
 The roots must not overlap. Vapor discovers the installation from the running
@@ -46,8 +50,8 @@ repository. It is not the installed Vapor home or the installed product root.
 - [Cargo integration](docs/cargo-metadata.md): required Rust workspaces,
   authority boundaries, nested-workspace consequences, and derived metadata.
 - [Setup](docs/setup.md): explicit script-owned Vapor User Data installation of
-  SteamCMD and developer-mode Rust/Cargo tooling, plus linked developer
-  providers such as Git.
+  SteamCMD and developer-mode Rust/Cargo tooling, plus Vapor-managed Git and
+  other controlled developer providers.
 - [Distribution](docs/distribution.md): allowlisted staging, exclusions, docs,
   launch entrypoints/scripts, SteamPipe templates, and smoke validation.
 - [Steam development](docs/steam-development.md): root publish previews, manual

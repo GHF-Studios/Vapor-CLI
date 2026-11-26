@@ -1,8 +1,9 @@
 //! Developer Git provider discovery and linking.
 //!
 //! Git is not a player-mode dependency. Commands that explicitly need Git use
-//! a developer provider resolved from `VAPOR_GIT`, app-local state, or the host
-//! PATH/common install locations.
+//! a developer provider resolved from an explicit `VAPOR_GIT` override, a
+//! persisted operator link, or Vapor-managed User Data. It never silently
+//! adopts a host Git installation.
 
 use crate::discovery::InstallationPaths;
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,7 @@ use std::{
 
 const PROVIDER_FILE: &str = "providers/git.toml";
 const GIT_ENV: &str = "VAPOR_GIT";
+const MANAGED_GIT_DIRECTORY: &str = "tools/git";
 
 /// Resolved developer Git provider.
 #[derive(Debug, Clone)]
@@ -41,10 +43,8 @@ pub(crate) enum GitProviderSource {
     Environment,
     /// Persisted app-local provider state.
     Linked,
-    /// Executable found through PATH.
-    Path,
-    /// Executable found in an OS-specific common location.
-    CommonLocation,
+    /// Executable provisioned under Vapor User Data.
+    Managed,
 }
 
 impl GitProviderSource {
@@ -53,8 +53,7 @@ impl GitProviderSource {
         match self {
             Self::Environment => "VAPOR_GIT",
             Self::Linked => "linked provider",
-            Self::Path => "PATH",
-            Self::CommonLocation => "common location",
+            Self::Managed => "Vapor User Data",
         }
     }
 }
@@ -79,21 +78,24 @@ pub(crate) fn resolve(installation: &InstallationPaths) -> Result<GitProvider, S
         return verify(path, GitProviderSource::Linked);
     }
 
-    for path in path_candidates() {
-        if let Ok(provider) = verify(path, GitProviderSource::Path) {
-            return Ok(provider);
-        }
-    }
-
-    for path in common_candidates() {
-        if let Ok(provider) = verify(path, GitProviderSource::CommonLocation) {
-            return Ok(provider);
+    for path in managed_candidates(installation) {
+        if path.is_file() {
+            return verify(path, GitProviderSource::Managed);
         }
     }
 
     Err(format!(
-        "developer Git provider is not linked\nhelp: run `provider git link /path/to/git` inside Vapor Shell, or set {GIT_ENV}=/path/to/git\nnote: normal Steam play does not require Git"
+        "Vapor-managed Git is not installed and no explicit provider is linked\nhelp: Developer setup must provision Git under Vapor User Data; an operator may explicitly link an existing Git with `provider git link /path/to/git` or set {GIT_ENV}=/path/to/git\nnote: Vapor does not silently use host PATH Git, and normal game play does not require Git"
     ))
+}
+
+fn managed_candidates(installation: &InstallationPaths) -> Vec<PathBuf> {
+    let root = installation.user_data_root().join(MANAGED_GIT_DIRECTORY);
+    if cfg!(windows) {
+        vec![root.join("cmd").join(executable("git"))]
+    } else {
+        vec![root.join("bin").join("git")]
+    }
 }
 
 /// Persist an explicit developer Git provider.
@@ -196,33 +198,6 @@ fn verify(path: PathBuf, source: GitProviderSource) -> Result<GitProvider, Strin
         ));
     }
     Ok(GitProvider { path, source })
-}
-
-fn path_candidates() -> Vec<PathBuf> {
-    env::var_os("PATH")
-        .into_iter()
-        .flat_map(|paths| env::split_paths(&paths).collect::<Vec<_>>())
-        .map(|directory| directory.join(executable("git")))
-        .collect()
-}
-
-fn common_candidates() -> Vec<PathBuf> {
-    if cfg!(windows) {
-        [
-            r"C:\Program Files\Git\cmd\git.exe",
-            r"C:\Program Files\Git\bin\git.exe",
-            r"C:\Program Files (x86)\Git\cmd\git.exe",
-            r"C:\Program Files (x86)\Git\bin\git.exe",
-        ]
-        .into_iter()
-        .map(PathBuf::from)
-        .collect()
-    } else {
-        ["/usr/bin/git", "/usr/local/bin/git", "/bin/git"]
-            .into_iter()
-            .map(PathBuf::from)
-            .collect()
-    }
 }
 
 fn canonical_file(path: &Path, label: &str) -> Result<PathBuf, String> {

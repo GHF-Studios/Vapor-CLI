@@ -205,6 +205,22 @@ pub enum ShellCommand {
     Exit,
 }
 
+impl ShellCommand {
+    /// Whether this command needs the remembered source selection restored
+    /// before it runs. Installation and provider maintenance commands are
+    /// deliberately usable without a running Vapor Client service.
+    pub fn requires_saved_source_context(&self) -> bool {
+        !matches!(
+            self,
+            Self::Installation
+                | Self::Binaries
+                | Self::Libraries
+                | Self::Provider { .. }
+                | Self::Diagnostics { .. }
+        )
+    }
+}
+
 /// Playable launch targets.
 #[derive(Debug, Subcommand)]
 pub enum LaunchCommand {

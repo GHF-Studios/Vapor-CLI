@@ -92,6 +92,8 @@ enum Command {
     Fmt,
     /// Run `cargo build --workspace` through the Vapor-managed Cargo binary.
     Build,
+    /// Run `cargo build --workspace --release` through the Vapor-managed Cargo binary.
+    BuildRelease,
     /// Run `cargo test --workspace` through the Vapor-managed Cargo binary.
     Test,
     /// Build and promote the current first-party tool CLI into the executable-root `bin` directory.
@@ -176,6 +178,7 @@ impl Command {
             Self::Check => core::SdkCommand::Workspace(core::WorkspaceCommand::Check),
             Self::Fmt => core::SdkCommand::Workspace(core::WorkspaceCommand::Fmt),
             Self::Build => core::SdkCommand::Workspace(core::WorkspaceCommand::Build),
+            Self::BuildRelease => core::SdkCommand::Workspace(core::WorkspaceCommand::BuildRelease),
             Self::Test => core::SdkCommand::Workspace(core::WorkspaceCommand::Test),
             Self::Deploy => core::SdkCommand::Workspace(core::WorkspaceCommand::Deploy),
             Self::Workspace { command } => core::SdkCommand::Workspace(command.into_core()),

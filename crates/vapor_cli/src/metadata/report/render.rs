@@ -122,15 +122,21 @@ fn write_manifests(output: &mut String, report: &MetadataReport) {
             )
             .unwrap();
             for depot in &application.depots {
-                match depot.depot_id {
-                    Some(depot_id) => writeln!(
+                if let Some(depot_id) = depot.depot_id {
+                    writeln!(
                         output,
                         "    depot {}: {} ({})",
                         depot.kind, depot_id, depot.steam_os_rule
-                    ),
-                    None => writeln!(output, "    depot {}: not configured", depot.kind),
+                    )
+                    .unwrap();
+                } else {
+                    writeln!(
+                        output,
+                        "    depot {}: not declared ({})",
+                        depot.kind, depot.steam_os_rule
+                    )
+                    .unwrap();
                 }
-                .unwrap();
             }
         }
         ResourceState::Absent => {}

@@ -205,9 +205,11 @@ target-specific app or content payloads; Vapor itself, engines, games, tools,
 and dynamic libraries all need runtime outputs staged per supported target.
 
 The publish preflight requires Vapor User Data Rust/Cargo and cross-build tooling for
-the release matrix, a linked developer Git provider for explicit Git-backed
-workflows, plus SteamCMD for real upload. Player-mode and developer-mode setup
-are owned by app-root tools under `<app-root>/resources/vapor/tools/`.
+the release matrix, Vapor-managed Git for explicit Git-backed workflows, and
+SteamCMD for real upload. An operator-linked Git provider is an explicit
+override; host PATH discovery is not a release bootstrap path. Player-mode and
+developer-mode setup are owned by app-root tools under
+`<app-root>/resources/vapor/tools/`.
 
 The root source owns the tool payload under `resources/vapor/tools`; root
 build/package/publish copies that payload into the installed app root. The

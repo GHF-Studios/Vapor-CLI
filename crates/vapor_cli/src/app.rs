@@ -80,9 +80,16 @@ fn run_inner(startup: StartupMode) -> Result<(), String> {
         installation.identity_id()
     ));
     let mut state = ShellState::closed(installation);
-    diagnostics::event("startup: restoring saved source selection");
-    open_saved_source(&mut state)?;
-    diagnostics::event("startup: saved source selection restored");
+    let restore_source = match &startup {
+        StartupMode::Repl { .. } => true,
+        StartupMode::Direct(command) => command.requires_saved_source_context(),
+        StartupMode::Exit => false,
+    };
+    if restore_source {
+        diagnostics::event("startup: restoring saved source selection");
+        open_saved_source(&mut state)?;
+        diagnostics::event("startup: saved source selection restored");
+    }
     diagnostics::record_source_context(state.source());
 
     if let StartupMode::Direct(command) = startup {

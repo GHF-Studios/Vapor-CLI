@@ -164,21 +164,21 @@ commands.
 
 ### `provider git link PATH`
 
-Persist an explicit Git executable path under Vapor-home state. Vapor validates
-the executable with `git --version` before saving it.
+Persist an explicit operator-selected Git executable path under Vapor User
+Data. Vapor validates the executable with `git --version` before saving it.
 
 ### `provider git clear`
 
-Remove the persisted Git executable path. `VAPOR_GIT` and PATH/common OS
-discovery may still resolve Git after this.
-
-### `provider git run -- ARG...`
+Remove the persisted explicit Git path. `VAPOR_GIT` or the Vapor-managed Git
+installation may still resolve Git after this.
 
 Run Git through Vapor's resolved developer Git provider. Vapor passes arguments
 and standard streams through to the selected executable, mapping a successful
 Git exit to success and a failing exit to a Vapor command failure. This is the
-provider boundary for Vapor-owned source operations; Git remains an external
-provider that must be linked, configured, or discoverable.
+provider boundary for Vapor-owned source operations. Resolution order is an
+explicit `VAPOR_GIT` override, an operator-linked executable, then Git
+provisioned under Vapor User Data. Vapor does not silently select host PATH or
+common-location Git.
 
 ## Platform SSH requests
 

@@ -62,9 +62,12 @@ marker.
 ├── logs/ and diagnostics/
 ├── content/                              mutable Workshop packages
 ├── output/                               disposable build and depot staging
-├── rustup/ and rustup-home/
-├── cargo-home/
-└── tools/                               SteamCMD and cross toolchains
+├── cache/build/                          managed Cargo build outputs
+└── tools/
+    ├── cargo/home/
+    ├── rustup/{bin,home}/
+    ├── steamcmd/
+    └── cross-toolchains
 ```
 
 Vapor commands may receive explicit product context through
