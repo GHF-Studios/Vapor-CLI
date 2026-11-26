@@ -4,7 +4,7 @@ use crate::{
     app_local_tools,
     command::{
         self, ClientCommand, ContentCommand, Control, DiagnosticsCommand, LaunchCommand,
-        ProviderCommand, RootCommand, ScriptCommand, ShellCommand, SourceCommand,
+        PlatformCommand, ProviderCommand, RootCommand, ScriptCommand, ShellCommand, SourceCommand,
     },
     diagnostics::{self, CaptureOptions},
     discovery::EnvironmentPaths,
@@ -54,6 +54,9 @@ pub fn run() -> Result<(), String> {
     diagnostics::init_from_current_exe(startup.diagnostics);
     let result = match startup.mode {
         StartupMode::Direct(ShellCommand::Client { command }) => command::execute_client(command),
+        StartupMode::Direct(ShellCommand::Platform { command }) => {
+            command::execute_platform_ssh(command)
+        }
         mode => run_inner(mode),
     };
     if let Err(error) = &result {
@@ -286,6 +289,11 @@ enum HostSubcommand {
         #[command(subcommand)]
         command: ClientCommand,
     },
+    /// Request temporary, operator-approved Platform SSH access.
+    Platform {
+        #[command(subcommand)]
+        command: PlatformCommand,
+    },
     /// Manage authored source roots.
     Source {
         #[command(subcommand)]
@@ -378,6 +386,7 @@ impl HostSubcommand {
                 command,
             },
             HostSubcommand::Client { command } => ShellCommand::Client { command },
+            HostSubcommand::Platform { command } => ShellCommand::Platform { command },
             HostSubcommand::Source { command } => ShellCommand::Source { command },
             HostSubcommand::Installation => ShellCommand::Installation,
             HostSubcommand::Binaries => ShellCommand::Binaries,
