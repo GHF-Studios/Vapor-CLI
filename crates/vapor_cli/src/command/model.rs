@@ -55,8 +55,15 @@ pub enum ShellCommand {
         command: SourceCommand,
     },
 
-    /// Print the Steam installation/app root.
+    /// Print the standalone Vapor home.
     Installation,
+
+    /// Inspect Vapor storage and remove explicitly reviewed generated data.
+    Cleanup {
+        /// Selected storage read or write operation.
+        #[command(subcommand)]
+        command: CleanupCommand,
+    },
 
     /// Print the directory containing the running Vapor shell binary.
     Binaries,
@@ -193,6 +200,33 @@ pub enum LaunchCommand {
     Selected,
     /// Launch the immutable default Packagepack shipped with this Steam app.
     BundledDefault,
+}
+
+/// Read the canonical Vapor storage inventory or delete one listed item.
+#[derive(Debug, Subcommand, Clone)]
+pub enum CleanupCommand {
+    /// List storage areas and cleanup candidates.
+    List {
+        /// Emit structured JSON for other Vapor tools.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Inspect one exact candidate ID from `cleanup list` without changing files.
+    Inspect {
+        /// Exact candidate ID printed by `cleanup list`.
+        id: String,
+    },
+    /// Remove one exact candidate ID from `cleanup list`.
+    Remove {
+        /// Exact candidate ID printed by `cleanup list`.
+        id: String,
+        /// Byte count shown during review. Removal is refused if it has changed.
+        #[arg(long, required = true)]
+        expected_bytes: u64,
+        /// Exact phrase `DELETE <ID>` shown by `cleanup inspect`.
+        #[arg(long, required = true)]
+        confirm: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -356,6 +390,8 @@ pub enum ClientLaunchMode {
     Installer,
     /// Open the Rust workspace IDE.
     Ide,
+    /// Open the storage accounting and targeted cleanup tool.
+    Cleanup,
 }
 
 pub(super) fn client_launch_arguments(
@@ -369,6 +405,7 @@ pub(super) fn client_launch_arguments(
         ClientLaunchMode::Shell => "shell",
         ClientLaunchMode::Installer => "installer",
         ClientLaunchMode::Ide => "ide",
+        ClientLaunchMode::Cleanup => "cleanup",
     };
     std::iter::once(std::ffi::OsString::from(mode))
         .chain(arguments)
@@ -519,7 +556,7 @@ pub enum IdeCommand {
 /// Complete application/depot root operations.
 #[derive(Debug, Subcommand)]
 pub enum RootCommand {
-    /// Build every root application project into app-root build outputs.
+    /// Build every root application project into Vapor-home build outputs.
     Build {
         /// Build optimized release artifacts without promoting them.
         #[arg(long)]
@@ -561,7 +598,7 @@ pub enum RootCommand {
         #[arg(long)]
         host_only: bool,
     },
-    /// Assemble and smoke-check the local application/depot package.
+    /// Stage standalone runtime bundles and any optional Steam depot payloads.
     Package {
         /// Runtime target triple to stage launch scripts for. May be repeated.
         #[arg(long, value_name = "TARGET")]
@@ -581,20 +618,17 @@ pub enum RootCommand {
         /// Existing non-default beta branch; defaults to the distribution manifest.
         #[arg(long)]
         branch: Option<String>,
-        /// Rust target triple for dry-run/custom root application binaries. May be repeated.
+        /// ABI target triple whose manifest-declared files are staged. May be repeated.
         #[arg(long, value_name = "TARGET")]
         target: Vec<String>,
-        /// Build and stage the manifest runtime target matrix. This is the default when declared.
+        /// Stage every target declared by the product manifest.
         #[arg(long)]
         release_targets: bool,
-        /// Build and stage only the host target for a dry-run/local smoke pass.
+        /// Stage only the host target for a local package preview.
         #[arg(long)]
         host_only: bool,
-        /// Use already-promoted app binaries for dry-run previews only.
-        #[arg(long)]
-        skip_build: bool,
-        /// Internal Steam build description.
-        #[arg(long, default_value = "Vapor development build")]
+        /// Steam release description.
+        #[arg(long, default_value = "Loo-Cast content release")]
         description: String,
         /// Generate staging and a preview VDF without uploading.
         #[arg(long)]
@@ -648,7 +682,7 @@ pub enum ContentCommand {
         #[arg(long)]
         host_only: bool,
     },
-    /// Stage a content package under the app root.
+    /// Stage a content package under the Vapor home.
     Package {
         /// Artifact ID, local name, or PublishedFileId.
         #[arg(value_name = "ARTIFACT")]
@@ -684,7 +718,7 @@ pub enum ContentCommand {
         #[arg(value_name = "ARTIFACT_OR_WORKSHOP_ID", required = true, num_args = 1..)]
         targets: Vec<String>,
     },
-    /// Install source or cached content into the app root.
+    /// Install source or cached content into the Vapor home.
     Install {
         /// Artifact ID, local name, PublishedFileId, or cached Workshop ID.
         #[arg(value_name = "ARTIFACT_OR_WORKSHOP_ID")]

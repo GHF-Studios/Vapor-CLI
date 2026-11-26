@@ -48,7 +48,12 @@ fn write_source(output: &mut String, report: &MetadataReport) {
 }
 
 fn write_installation(output: &mut String, report: &MetadataReport) {
-    writeln!(output, "  App root: {}", report.installation.root.display()).unwrap();
+    writeln!(
+        output,
+        "  Vapor home: {}",
+        report.installation.root.display()
+    )
+    .unwrap();
     writeln!(
         output,
         "  Development tools: {}",
@@ -117,11 +122,14 @@ fn write_manifests(output: &mut String, report: &MetadataReport) {
             )
             .unwrap();
             for depot in &application.depots {
-                writeln!(
-                    output,
-                    "    depot {}: {} ({})",
-                    depot.kind, depot.depot_id, depot.steam_os_rule
-                )
+                match depot.depot_id {
+                    Some(depot_id) => writeln!(
+                        output,
+                        "    depot {}: {} ({})",
+                        depot.kind, depot_id, depot.steam_os_rule
+                    ),
+                    None => writeln!(output, "    depot {}: not configured", depot.kind),
+                }
                 .unwrap();
             }
         }

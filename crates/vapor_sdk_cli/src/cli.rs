@@ -5,7 +5,6 @@ mod leaf;
 mod pack;
 mod packagepack;
 mod repair;
-mod root;
 mod steam;
 mod template;
 mod toolchain;
@@ -15,7 +14,6 @@ use leaf::LeafCommand;
 use pack::PackCommand;
 use packagepack::PackagepackCommand;
 use repair::RepairCommand;
-use root::RootCommand;
 use std::path::PathBuf;
 use steam::SteamCommand;
 use template::TemplateCommand;
@@ -83,11 +81,6 @@ enum Command {
     Status,
     /// Show app-root shell activation and PATH setup.
     Env,
-    /// Package or publish the first-party Steam-distributed Vapor root.
-    Root {
-        #[command(subcommand)]
-        command: RootCommand,
-    },
     /// Inspect or authenticate SteamCMD for Vapor release workflows.
     Steam {
         #[command(subcommand)]
@@ -179,7 +172,6 @@ impl Command {
             Self::Version => core::SdkCommand::Version,
             Self::Status => core::SdkCommand::Status,
             Self::Env => core::SdkCommand::Environment(core::EnvironmentCommand::Status),
-            Self::Root { command } => core::SdkCommand::Root(command.into_core()),
             Self::Steam { command } => core::SdkCommand::Steam(command.into_core()),
             Self::Check => core::SdkCommand::Workspace(core::WorkspaceCommand::Check),
             Self::Fmt => core::SdkCommand::Workspace(core::WorkspaceCommand::Fmt),

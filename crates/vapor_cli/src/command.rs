@@ -3,8 +3,8 @@
 //! Static finite argument domains use Clap enums. Dynamic domains, such as
 //! discovered Cargo workspace names, are validated by Vapor metadata.
 //!
-//! Installation commands report app-root resource paths; they never move
-//! the source cursor into the Steam application directory.
+//! Installation commands report Vapor-home resource paths; they never move
+//! the source cursor into an external Steam product directory.
 
 use crate::{
     app_local_tools::AppToolRequirement,
@@ -92,6 +92,9 @@ fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control
         ShellCommand::Source { command } => source_commands::execute_source(command, state)?,
         ShellCommand::Installation => {
             println!("{}", state.installation().root().display());
+        }
+        ShellCommand::Cleanup { command } => {
+            crate::storage_report::execute(command, state.installation().root())?;
         }
         ShellCommand::Binaries => {
             println!("{}", state.installation().binaries().display());

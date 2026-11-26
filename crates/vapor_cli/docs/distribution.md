@@ -1,4 +1,4 @@
-# Distribution and app/depot staging
+# Steam app/depot content staging
 
 Vapor-Root is the app/depot source root. Its `App-Source.vapor.toml` declares
 `[root]`, `[root.steam]`, and the split-depot file membership. The shipped app
@@ -7,35 +7,35 @@ first-party Engine, Game, and Packagepack runtime closure is bundled under
 `content/default/`; mutable Workshop Library state remains in Vapor User Data.
 Vapor-Root does not duplicate Cargo or Git submodule membership.
 
-```toml
-[root.steam]
-app-id = 2122620
-development-branch = "vapor-dev"
+The Loo-Cast workspace still authors three content items: Spacetime Engine,
+Loo-Cast Game, and Loo-Cast Packagepack. The Packagepack Cargo binary directly
+links the Engine and Game crates, so its target build is the composed runnable
+product. Depot staging contains the Packagepack manifest, that target binary,
+and any declared required runtime libraries. It rejects component
+directories, loose Engine/Game libraries, Vapor files, and undeclared files.
 
-[root.steam.depots.common]
-id = 2122621
+Vapor runtime files are a separate standalone distribution. The Steam app must
+not contain the Vapor runtime, source checkouts, docs, developer tools,
+toolchain caches, logs, receipts, or user state. Steam launches the Packagepack
+executable directly. Vapor home owns Vapor files and mutable state.
 
-[[root.steam.depots.common.include]]
-root = "source"
-from = "App.vapor.toml"
-to = "App.vapor.toml"
-required = true
+## Staging behavior
 
-[root.steam.depots.linux]
-id = 2122622
+`root package --release-targets` rebuilds the allowlisted staging tree under
+`output/root/content` in Vapor home. `root publish --dry-run --release-targets`
+repeats the stage, validates the required manifest paths, fingerprints the
+payload, and writes SteamPipe preview files without uploading. A real publish
+re-stages and verifies the fingerprint before upload. Neither operation copies
+from the full Vapor home or adds undeclared files.
 
-[[root.steam.depots.linux.include]]
-root = "source"
-from = "resources/vapor/shell-scripts/linux/vapor-launch.sh"
-to = "bin/vapor-launch.sh"
-required = true
+The `root.runtime.targets` list describes ABI targets available for this
+product. `--target TARGET` selects a deliberate subset for a preview; the real
+release should include the complete declared target matrix. Target-specific
+includes must name the same target as the depot's operating-system kind.
 
-[[root.steam.depots.linux.include]]
-root = "installation"
-from = "bin/x86_64-unknown-linux-gnu"
-to = "bin/x86_64-unknown-linux-gnu"
-target = "x86_64-unknown-linux-gnu"
-required = true
+Vapor keeps source checkouts, compiler state, tools, extracted-source cache,
+installation records, settings, logs, and generated output in Vapor home. The
+product source tree is an explicit input, not the owner of Vapor state.
 
 [root.steam.depots.windows]
 id = 2122623

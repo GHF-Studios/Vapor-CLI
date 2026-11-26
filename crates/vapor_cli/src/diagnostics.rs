@@ -257,10 +257,7 @@ pub(crate) fn init_from_current_exe(options: CaptureOptions) {
         .as_ref()
         .map(|installation| installation.root().to_path_buf())
         .or_else(|| fallback_app_root(&executable));
-    let Some(app_root) = app_root.filter(|root| root.join(manifest::APP_FILE_NAME).is_file())
-    else {
-        return;
-    };
+    let Some(app_root) = app_root else { return };
     let args = redacted_args(env::args_os());
     let installation_identity = installation
         .as_ref()
@@ -343,8 +340,12 @@ pub(crate) fn record_installation(installation: &InstallationPaths) {
             metadata.paths.app_root = display_path(installation.root());
             metadata.paths.vapor_executable = display_path(installation.executable());
             metadata.installation.identity_id = Some(installation.identity_id().to_owned());
-            metadata.installation.app_manifest =
-                display_path(&installation.root().join(manifest::APP_FILE_NAME));
+            metadata.installation.app_manifest = display_path(
+                &installation
+                    .product_root()
+                    .unwrap_or_else(|| installation.root())
+                    .join(manifest::APP_FILE_NAME),
+            );
             metadata.readiness = Some(ReadinessMetadata {
                 steamcmd: component_metadata(tool_status.steamcmd()),
                 rust_cargo: component_metadata(tool_status.rust()),

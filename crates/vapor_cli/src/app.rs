@@ -12,6 +12,7 @@ use crate::{
     metadata::MetadataFormat,
     prompt::VaporPrompt,
     state::ShellState,
+    storage_report,
 };
 use clap::{Parser, Subcommand, error::ErrorKind};
 use clap_repl::{ClapEditor, ReadCommandOutput};
@@ -299,8 +300,13 @@ enum HostSubcommand {
         #[command(subcommand)]
         command: SourceCommand,
     },
-    /// Print the Steam installation/app root.
+    /// Print the standalone Vapor home.
     Installation,
+    /// Inspect or remove selected generated data in the canonical Vapor home.
+    Cleanup {
+        #[command(subcommand)]
+        command: CleanupCommand,
+    },
     /// Print the app-local binary directory.
     Binaries,
     /// Print the app-local library directory.
@@ -389,6 +395,7 @@ impl HostSubcommand {
             HostSubcommand::Platform { command } => ShellCommand::Platform { command },
             HostSubcommand::Source { command } => ShellCommand::Source { command },
             HostSubcommand::Installation => ShellCommand::Installation,
+            HostSubcommand::Cleanup { command } => ShellCommand::Cleanup { command },
             HostSubcommand::Binaries => ShellCommand::Binaries,
             HostSubcommand::Libraries => ShellCommand::Libraries,
             HostSubcommand::Metadata { format } => ShellCommand::Metadata { format },

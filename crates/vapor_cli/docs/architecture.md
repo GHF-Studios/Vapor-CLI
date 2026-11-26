@@ -3,9 +3,10 @@
 ## Purpose
 
 Vapor Shell gives authored source a stable command environment without making
-that source part of the Steam installation/app root. The executable may be
-globally reachable through PATH; process invocation does not determine source
-ownership or widen filesystem access.
+that source part of the standalone Vapor home. The executable may be globally
+reachable through PATH; process invocation does not determine source ownership
+or widen filesystem access. Steam provides local game products and does not own
+Vapor's runtime, tools, caches, or mutable state.
 
 ## Authority hierarchy
 

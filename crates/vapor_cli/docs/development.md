@@ -55,19 +55,16 @@ contracts as downstream code would.
 ## Running locally
 
 Direct `cargo run` places the executable under the source repository, which is
-not the product surface. Build and verification work should use the app-local
-Rust/Cargo toolchain prepared by the app-root
-`resources/vapor/tools/production/app_setup/setup_development.rs` tool, then
-run installed Vapor commands from the Steam app root. The
-`scripts/bootstrap-local-app-deploy.sh` bridge exists only to seed or refresh a
-local Steam app root during development; release-mode launches use
-`bin/<target>/vapor-entrypoint[.exe]`, `bin/vapor-launch.*` scripts, and
-`bin/<target>/vapor[.exe]`. Integration tests build temporary sample trees for
-this topology when local coverage is useful.
+not the product surface. Build and verification work should use Vapor-managed
+Rust/Cargo tooling in Vapor home. The independent Vapor home owns release-mode
+launches through `bin/<target>/vapor-entrypoint[.exe]` and the other runtime
+applications. Steam depots contain the Loo-Cast Packagepack manifest, one
+primary executable per target, and only declared required runtime libraries;
+they are not a development install target.
 
 After the installed binary works, run `source open /path/to/source` from the
-installed shell. This validates and registers the external source selection for
-future Steam GUI launches without moving source into the app installation.
+installed shell. This validates and registers the external source selection
+without moving source into Vapor home.
 
 ## Documentation policy
 

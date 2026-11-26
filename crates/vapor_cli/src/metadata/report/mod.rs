@@ -311,7 +311,7 @@ struct ApplicationReport {
 #[derive(Debug, Clone, Serialize)]
 struct SteamDepotReport {
     kind: String,
-    depot_id: u32,
+    depot_id: Option<u32>,
     steam_os_rule: String,
 }
 
