@@ -48,13 +48,6 @@ pub enum ShellCommand {
         command: ClientCommand,
     },
 
-    /// Request and manage temporary access to Vapor Platform services.
-    Platform {
-        /// Platform operation.
-        #[command(subcommand)]
-        command: PlatformCommand,
-    },
-
     /// Open, index, inspect, sync, or repair authored source roots.
     Source {
         /// Source operation.
@@ -256,37 +249,6 @@ pub enum CleanupCommand {
         /// Exact phrase `DELETE <ID>` shown by `cleanup inspect`.
         #[arg(long, required = true)]
         confirm: String,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-/// Operations on Vapor Platform.
-pub enum PlatformCommand {
-    /// Temporary SSH access operations.
-    Ssh {
-        #[command(subcommand)]
-        /// SSH operation to perform.
-        command: PlatformSshCommand,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-/// SSH access request operations.
-pub enum PlatformSshCommand {
-    /// Request temporary SSH access after confirming the request in Identity.
-    Request {
-        /// Why temporary access is needed.
-        #[arg(long)]
-        purpose: String,
-        /// Requested capability (repeat to request multiple capabilities).
-        #[arg(long = "capability", required = true)]
-        capability: Vec<String>,
-        /// Requested duration in hours (1–8).
-        #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u8).range(1..=8))]
-        duration_hours: u8,
-        /// Existing OpenSSH private identity; defaults to Vapor User Data/ssh/platform_ed25519.
-        #[arg(long)]
-        identity_file: Option<PathBuf>,
     },
 }
 
@@ -946,7 +908,7 @@ mod platform_ssh_parse_tests {
     }
 
     #[test]
-    fn request_defaults_to_one_hour() {
+    fn request_defaults_to_eight_hours() {
         match request(&[
             "vapor",
             "platform",
@@ -957,12 +919,12 @@ mod platform_ssh_parse_tests {
             "--capability",
             "vapor_deploy",
         ]) {
-            PlatformSshCommand::Request { duration_hours, .. } => assert_eq!(duration_hours, 1),
+            PlatformSshCommand::Request { duration_hours, .. } => assert_eq!(duration_hours, 8),
         }
     }
 
     #[test]
-    fn request_accepts_repeated_capabilities_and_identity_override() {
+    fn request_accepts_repeated_typed_capabilities() {
         match request(&[
             "vapor",
             "platform",
@@ -971,20 +933,17 @@ mod platform_ssh_parse_tests {
             "--purpose",
             "inspect release config",
             "--capability",
-            "vapor_deploy",
+            "vapor-deploy",
             "--capability",
-            "vapor_service_control",
-            "--identity-file",
-            "/tmp/test_identity",
+            "vapor-service-control",
         ]) {
-            PlatformSshCommand::Request {
+            PlatformSshCommand::Request { capability, .. } => assert_eq!(
                 capability,
-                identity_file,
-                ..
-            } => {
-                assert_eq!(capability, ["vapor_deploy", "vapor_service_control"]);
-                assert_eq!(identity_file, Some(PathBuf::from("/tmp/test_identity")));
-            }
+                [
+                    PlatformSshCapability::VaporDeploy,
+                    PlatformSshCapability::VaporServiceControl
+                ]
+            ),
         }
     }
 
@@ -1000,7 +959,7 @@ mod platform_ssh_parse_tests {
                     "--purpose",
                     "inspect",
                     "--capability",
-                    "vapor_deploy",
+                    "vapor-deploy",
                     "--duration-hours",
                     hours,
                 ])

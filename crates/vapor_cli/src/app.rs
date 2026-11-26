@@ -3,7 +3,7 @@
 use crate::{
     app_local_tools,
     command::{
-        self, ClientCommand, ContentCommand, Control, DiagnosticsCommand, LaunchCommand,
+        self, CleanupCommand, ClientCommand, ContentCommand, Control, DiagnosticsCommand, LaunchCommand,
         PlatformCommand, ProviderCommand, RootCommand, ScriptCommand, ShellCommand, SourceCommand,
     },
     diagnostics::{self, CaptureOptions},
@@ -12,7 +12,6 @@ use crate::{
     metadata::MetadataFormat,
     prompt::VaporPrompt,
     state::ShellState,
-    storage_report,
 };
 use clap::{Parser, Subcommand, error::ErrorKind};
 use clap_repl::{ClapEditor, ReadCommandOutput};

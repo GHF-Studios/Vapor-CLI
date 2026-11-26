@@ -134,24 +134,6 @@ fn execute_body(command: ShellCommand, state: &mut ShellState) -> Result<Control
         ShellCommand::Content { command } => content_commands::execute_content(command, state)?,
         ShellCommand::Script { command } => execute_script_command(command, state)?,
         ShellCommand::Provider { command } => execute_provider(command, state)?,
-        ShellCommand::Platform { command } => match command {
-            PlatformCommand::Ssh { command } => match command {
-                PlatformSshCommand::Request {
-                    purpose,
-                    capability,
-                    duration_hours,
-                    identity_file,
-                } => {
-                    platform_ssh::execute_platform_ssh_request(
-                        &purpose,
-                        &capability,
-                        duration_hours,
-                        identity_file.as_deref(),
-                        state,
-                    )?;
-                }
-            },
-        },
         ShellCommand::Sdk { args } => {
             let arguments = std::iter::once(std::ffi::OsString::from("vapor sdk")).chain(args);
             vapor_sdk_cli::run(arguments)?;
@@ -563,15 +545,7 @@ fn execute_git_provider(command: GitProviderCommand, state: &ShellState) -> Resu
         }
         GitProviderCommand::Run { args } => {
             let provider = git_provider::resolve(state.installation())?;
-            let status = std::process::Command::new(provider.path())
-                .args(&args)
-                .status()
-                .map_err(|error| {
-                    format!(
-                        "failed to start Git provider '{}': {error}",
-                        provider.path().display()
-                    )
-                })?;
+            let status = provider.run(&args)?;
             if status.success() {
                 Ok(())
             } else {
