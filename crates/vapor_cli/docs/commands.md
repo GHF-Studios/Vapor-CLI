@@ -380,7 +380,11 @@ Installable means a workspace declares at least one
 `[workspace].binaries` entry. When `[root.runtime].targets` is declared,
 omitting target flags builds that full runtime matrix by default. Repeat
 `--target` to build an explicit custom subset, such as only Windows GNU/LLVM.
-`--release` uses Cargo's optimized profile and does not promote outputs.
+`--release` selects Cargo's optimized profile and is accepted only in Vapor's
+designated GitHub Actions distribution job. Local work uses the single `dev`
+profile. The distribution job sets `VAPOR_DISTRIBUTION_JOB=steam-release-v1`.
+For `root publish --dry-run`, staging reuses already built outputs; it does not
+create release binaries locally.
 
 `root build` does not refresh installed app binaries, docs, Vapor scripts, or
 launch scripts. Use `root deploy` to promote already-built app outputs into the
