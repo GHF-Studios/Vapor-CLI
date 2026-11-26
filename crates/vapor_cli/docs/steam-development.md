@@ -22,28 +22,33 @@ from Vapor Client to assemble the Loo-Cast app is retired. Generic `root
 package` and `root publish` remain available for an explicitly selected
 application source that declares its own depot policy.
 
-Vapor should publish one app build made from three root depots:
+`App-Source.vapor.toml` is the allowlist for app/depot files. It takes the
+composition manifest from this source checkout and product trees from
+`VAPOR_PRODUCT_ROOT`. The current product layout has shared product metadata
+plus target-specific ABI artifacts:
 
-- **common depot**: OS-neutral `App.vapor.toml`, docs, app scripts, and
-  examples.
-  Steamworks OS rule: all operating systems.
-- **linux depot**: Linux launch script and Linux `bin/<target>/` runtime
-  binaries, including `vapor-entrypoint`. Steamworks OS rule: Linux.
-- **windows depot**: Windows launch script, Windows `bin/<target>/` runtime
-  binaries including `vapor-entrypoint.exe`, and required runtime DLLs.
-  Steamworks OS rule: Windows.
+- The common depot contains `App.vapor.toml` and shared product files.
+- The Linux depot contains the Linux engine library, game library, and
+  Packagepack binary under their `x86_64-unknown-linux-gnu` directories.
+- The Windows depot contains the Windows engine library, game library, and
+  Packagepack binary plus `libunwind.dll` under their
+  `x86_64-pc-windows-gnullvm` directories.
 
-The root `App-Source.vapor.toml` records those IDs and each depot's include
-list under `[root.steam.depots.*]`. Do not publish a split build until the real
-Steamworks depot IDs and file mappings are configured there:
+The manifest excludes `lib/` and `bin/` from the common product trees so ABI
+files are not copied to every platform. Platform-scoped includes put each
+artifact in the depot for its target. `root.runtime.targets` is required and
+lists the ABI targets this content release supports; it does not describe Vapor
+runtime binaries. Release staging rejects targets not declared there and
+rejects a target whose platform depot or matching target-scoped product files
+are missing.
 
-```toml
-[root.steam]
-app-id = 2122620
-development-branch = "vapor-dev"
+Keep all Vapor-owned files and generated state outside the product tree. Product
+source caches, compiler caches, user settings, logs, installer state, and Vapor
+runtime binaries belong under Vapor home. A Steam depot include must be an
+explicit product file or composition manifest; never point it at a general
+Vapor-home directory.
 
-[root.steam.depots.common]
-id = 2122621
+## Review and publish
 
 [[root.steam.depots.common.include]]
 root = "source"
@@ -142,14 +147,16 @@ It does not install Rust/Cargo or cross-build toolchains. Development tooling is
 explicit:
 
 ```text
-rust-script --force <app-root>/resources/vapor/tools/production/app_setup/setup_development.rs
-rust-script --force <app-root>/resources/vapor/tools/production/app_setup/teardown_development.rs
+root package --release-targets
+root publish --dry-run --release-targets
 ```
 
-Setup and role changes happen when the user opens Installer; normal launches
-do not run installation as a hidden preflight. For ordinary testers,
-reinstalling the Steam app is the preferred recovery because the app root is
-disposable and should not hold authoritative user data.
+The preview stages only paths allowed by `App-Source.vapor.toml`, validates
+required files for the selected ABI targets, and writes SteamPipe preview
+files. It does not compile Vapor, package Vapor-home content, or upload.
+Product builds must already have produced the target-specific files under
+`VAPOR_PRODUCT_ROOT`. Steam publication never invokes Cargo or builds Vapor; it
+packages only the already-installed product files selected by the manifest.
 
 The default Steam **Play Loo-Cast** launch target starts the default playable
 composition. **Create with Vapor** hands off to the standalone Vapor chooser,
@@ -182,7 +189,7 @@ A development loop now has two explicit phases:
 Release-mode depot builds should target every shipped app platform:
 
 ```text
-root publish --dry-run
+root publish --account NAME --release-targets --yes
 ```
 
 The Windows GNU/LLVM target can be built from Linux with Vapor-owned llvm-mingw,
@@ -191,55 +198,6 @@ cross-link wrapper model. If a target is built on another machine, preserve the 
 `bin/<target>/` and `output/dev/<workspace>/<target>/debug/` relative paths
 when copying artifacts back to the publishing app root.
 
-For quick local Linux smoke, pass `--host-only`; Vapor then stages only the
-host `bin/<target>/` directory plus the matching launch script. When Windows
-artifacts were imported from another machine, use
-`root publish --skip-build --dry-run` only to preview staging. A real
-`root publish` always validates, builds, promotes, stages, and uploads the full
-declared Linux+Windows matrix.
-
-The concrete Windows build and Linux handoff checklist is documented in
-[`windows-gnullvm-release-proof.md`](windows-gnullvm-release-proof.md).
-
-## Authentication
-
-Vapor does not expose a standalone SteamCMD login workflow. Real publication is
-the authentication boundary: `root publish --account NAME --yes` asks the shared
-Vapor Client service to run installation-owned SteamCMD after it revalidates the
-reviewed payload. The service owns the upload lifecycle and reports its terminal
-result to the CLI. Vapor never accepts a password argument and never copies
-SteamCMD's `config/` into staging. SteamCMD prompts require an existing usable
-SteamCMD login session; interactive credential handoff from frontends is not yet
-implemented.
-
-Steam authentication is session-scoped by policy. Commands that publish for real
-must be typed manually in the interactive shell; scripts may dry-run but may not
-authenticate, perform real uploads, create Workshop items, or delete Workshop
-items.
-
-## Preview and publish
-
-Use `root publish --dry-run` first. It validates, builds, promotes app binaries,
-builds docs, stages and smoke-tests the split runtime depots, and writes an
-app-build VDF with `Preview = 1` and `SetLive = vapor-dev` plus one depot-build
-VDF per staged depot; it performs no upload and does not require active
-SteamCMD.
-
-A real upload requires both a non-default branch and explicit confirmation:
-
-```text
-root publish --account NAME --branch vapor-dev --yes
-```
-
-The Client service runs SteamCMD as the operation worker and returns the exit
-status or failure to the caller. `output/root/steam-build` is not cleared by
-staging; it contains SteamPipe manifests and chunk cache that improve subsequent
-uploads.
-
-The VDFs map only the already-clean split staging roots. Inclusion and
-credential exclusion are therefore decided before SteamPipe sees any files.
-
-Workshop content publication is separate from app/depot publication. Use
-`content publish ARTIFACT --dry-run` from a content workspace for package and
-Workshop VDF previews, then perform any real content upload manually with
-`content publish ARTIFACT --account ACCOUNT --yes`.
+Workshop publication remains a separate workflow for community content. These
+three first-party Loo-Cast products are delivered in the official Steam app and
+are not published as Workshop dependencies.
