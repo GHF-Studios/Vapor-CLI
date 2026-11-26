@@ -30,10 +30,15 @@ fn execute_client_body(command: ClientCommand) -> Result<(), String> {
             LocalClientDeploymentOutcome::AuthorityDelegated {
                 executable,
                 installation_root,
+                completion_log,
             } => {
-                println!("Transferring local deployment authority to source-built CLI:");
+                println!("Local deployment was handed to the source-built CLI:");
                 println!("  executable: {}", executable.display());
                 println!("  installation: {}", installation_root.display());
+                if let Some(log) = completion_log {
+                    println!("  promotion starts after this Vapor command exits");
+                    println!("  result log: {}", log.display());
+                }
             }
             LocalClientDeploymentOutcome::Deployed {
                 report,
@@ -324,7 +329,9 @@ pub(crate) fn send_client_action(
     client: &mut Client,
     action: ClientAction,
 ) -> Result<Option<vapor_client_protocol::OperationEvent>, String> {
-    send_client_action_inner(client, action, false).map(|(event, _)| event)
+    let event = send_client_action_inner(client, action, false)?.0;
+    observe_journey_event(event.as_ref());
+    Ok(event)
 }
 
 pub(crate) fn send_client_action_with_authoring_result(
@@ -337,7 +344,23 @@ pub(crate) fn send_client_action_with_authoring_result(
     ),
     String,
 > {
-    send_client_action_inner(client, action, true)
+    let result = send_client_action_inner(client, action, true)?;
+    observe_journey_event(result.0.as_ref());
+    Ok(result)
+}
+
+fn observe_journey_event(event: Option<&vapor_client_protocol::OperationEvent>) {
+    let Some(event) = event else { return };
+    if !matches!(event.status, OperationStatus::Succeeded) {
+        return;
+    }
+    if let Err(error) = vapor_client_application::observe_successful_operation(
+        &event.action,
+        &event.id,
+        event.composition_id.as_deref(),
+    ) {
+        eprintln!("warning: could not update guided journey progress: {error}");
+    }
 }
 
 fn send_client_action_inner(
