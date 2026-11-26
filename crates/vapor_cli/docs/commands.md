@@ -172,6 +172,33 @@ the executable with `git --version` before saving it.
 Remove the persisted Git executable path. `VAPOR_GIT` and PATH/common OS
 discovery may still resolve Git after this.
 
+## Platform SSH requests
+
+### `platform ssh request --purpose TEXT --capability CAPABILITY... [--duration-hours HOURS] [--identity-file PATH]`
+
+Request temporary SSH access to the Platform host. Vapor uses the default
+Ed25519 identity under Vapor User Data at `ssh/platform_ed25519` and creates it
+only when neither the private nor public file exists. An explicit
+`--identity-file` selects an existing OpenSSH identity; Vapor never replaces
+existing or incomplete key files. OpenSSH `ssh-keygen` must be installed.
+
+The request is sent to the configured `VAPOR_PLATFORM_BASE_URL` (default
+`https://vapor.ghf-studios.site`). Vapor starts Identity's device authorization,
+opens the confirmation page, and waits for you to approve the exact fingerprint,
+purpose, capabilities, and duration. Supported capabilities are
+`vapor_deploy`, `vapor_service_control`, and `host_admin`; host administrator
+access must be requested alone. Duration defaults to one hour and is limited to
+one through eight hours.
+
+After Identity confirms, Vapor submits the public key and request using the
+single-use credential held in process memory. The private key never leaves
+Vapor User Data. A successful request is still pending until a Platform root
+operator separately approves a grant and chooses the actual access.
+
+```text
+platform ssh request --purpose "inspect release configuration" --capability host_admin --duration-hours 1
+```
+
 ## Installation resources
 
 ### `cleanup list [--json]`
