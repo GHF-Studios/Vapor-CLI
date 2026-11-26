@@ -514,6 +514,12 @@ pub enum GitProviderCommand {
     },
     /// Remove the persisted Git executable path.
     Clear,
+    /// Run a Git command through Vapor's resolved provider.
+    Run {
+        /// Git arguments. Use `--` before this list to pass Git options unchanged.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true, required = true)]
+        args: Vec<std::ffi::OsString>,
+    },
 }
 
 /// Documentation operations.

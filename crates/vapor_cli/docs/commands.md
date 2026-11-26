@@ -172,6 +172,14 @@ the executable with `git --version` before saving it.
 Remove the persisted Git executable path. `VAPOR_GIT` and PATH/common OS
 discovery may still resolve Git after this.
 
+### `provider git run -- ARG...`
+
+Run Git through Vapor's resolved developer Git provider. Vapor passes arguments
+and standard streams through to the selected executable, mapping a successful
+Git exit to success and a failing exit to a Vapor command failure. This is the
+provider boundary for Vapor-owned source operations; Git remains an external
+provider that must be linked, configured, or discoverable.
+
 ## Platform SSH requests
 
 ### `platform ssh request --purpose TEXT --capability CAPABILITY... [--duration-hours HOURS] [--identity-file PATH]`

@@ -561,6 +561,23 @@ fn execute_git_provider(command: GitProviderCommand, state: &ShellState) -> Resu
             println!("  provider git status");
             Ok(())
         }
+        GitProviderCommand::Run { args } => {
+            let provider = git_provider::resolve(state.installation())?;
+            let status = std::process::Command::new(provider.path())
+                .args(&args)
+                .status()
+                .map_err(|error| {
+                    format!(
+                        "failed to start Git provider '{}': {error}",
+                        provider.path().display()
+                    )
+                })?;
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!("Git provider command failed with {status}"))
+            }
+        }
     }
 }
 
