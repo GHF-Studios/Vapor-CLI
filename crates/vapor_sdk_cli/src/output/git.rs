@@ -80,6 +80,8 @@ pub(crate) fn print_windows_inventory(
     println!("inventory: {}", report.inventory_path.display());
     println!("files: {}; expanded bytes: {}", report.file_count, report.expanded_bytes);
     println!("executables: {}; DLLs: {}", report.executables.len(), report.dlls.len());
+    let distinct_packages = report.package_records.iter().map(|record| record.package.as_str()).collect::<BTreeSet<_>>();
+    println!("package-version records: {}; distinct package names: {}", report.package_records.len(), distinct_packages.len());
     for expected in report.expected_paths {
         println!("{}: {}", expected.path, if expected.present { "present" } else { "absent" });
     }
