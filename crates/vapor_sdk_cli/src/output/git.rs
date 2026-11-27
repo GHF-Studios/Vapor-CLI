@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use vapor_sdk_core::{CommandSpec, GitNativeBuildReport, GlobalOptions};
+use vapor_sdk_core::{CommandSpec, GitNativeBuildReport, GitWindowsArchiveReport, GlobalOptions};
 
 pub(crate) fn print_build(
     globals: &GlobalOptions,
@@ -64,5 +64,40 @@ pub(crate) fn print_build(
     if globals.verbose {
         super::common::print_spec(spec);
     }
+    Ok(())
+}
+
+pub(crate) fn print_windows_inventory(
+    globals: &GlobalOptions,
+    spec: &CommandSpec,
+    report: GitWindowsArchiveReport,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!("{}", spec.summary);
+    println!("MinGit: {}", report.version);
+    println!("archive: {}", report.archive_path.display());
+    println!("archive size: {} bytes", report.archive_bytes);
+    println!("archive SHA-256: {}", report.archive_sha256);
+    println!("inventory: {}", report.inventory_path.display());
+    println!("files: {}; expanded bytes: {}", report.file_count, report.expanded_bytes);
+    println!("executables: {}; DLLs: {}", report.executables.len(), report.dlls.len());
+    for expected in report.expected_paths {
+        println!("{}: {}", expected.path, if expected.present { "present" } else { "absent" });
+    }
+    if let Some(versions) = report.package_versions {
+        println!("package versions:\n{}", versions.trim_end());
+    } else {
+        println!("package versions: absent");
+    }
+    if let Some(moved) = report.libexec_moved {
+        println!("relocated Git helpers (etc/libexec-moved.txt):\n{}", moved.trim_end());
+    } else {
+        println!("relocated Git helpers (etc/libexec-moved.txt): absent");
+    }
+    println!("license/notice paths: {}", report.license_and_notice_paths.len());
+    for path in report.license_and_notice_paths {
+        println!("  {path}");
+    }
+    println!("note: cache-only inspection; no files were extracted, activated, or published");
+    if globals.verbose { super::common::print_spec(spec); }
     Ok(())
 }

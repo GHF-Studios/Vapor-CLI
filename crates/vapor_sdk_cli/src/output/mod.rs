@@ -13,7 +13,7 @@ use vapor_sdk_core::steam::status::steam_status;
 use vapor_sdk_core::steam::types::SteamCommand;
 use vapor_sdk_core::{
     EnvironmentCommand, GlobalOptions, SdkCommand, ToolchainCommand, WorkspaceCommand,
-    environment_status, git_build, toolchain_install, toolchain_status, workspace_build,
+    environment_status, git_build, git_inspect_windows, toolchain_install, toolchain_status, workspace_build,
     workspace_build_release, workspace_check, workspace_deploy, workspace_fmt,
     workspace_resolve_lockfile, workspace_status, workspace_sync, workspace_test,
 };
@@ -70,6 +70,9 @@ pub(crate) fn print_command(
         }
         SdkCommand::Git(vapor_sdk_core::GitCommand::Build) => {
             git::print_build(&globals, &spec, git_build()?)
+        }
+        SdkCommand::Git(vapor_sdk_core::GitCommand::InspectWindows) => {
+            git::print_windows_inventory(&globals, &spec, git_inspect_windows()?)
         }
         _ => stub::print(&globals, &spec),
     }
