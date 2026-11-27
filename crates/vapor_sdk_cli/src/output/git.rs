@@ -15,6 +15,9 @@ pub(crate) fn print_build(
     );
     println!("cache key: {}", report.cache_key);
     println!("cached executable: {}", report.executable.display());
+    println!("payload archive: {}", report.payload_archive.display());
+    println!("payload archive size: {} bytes", report.payload_archive_bytes);
+    println!("payload archive SHA-256: {}", report.payload_archive_sha256);
     println!("source bundle: {}", report.source_bundle.display());
     println!("source bundle size: {} bytes", report.source_bundle_bytes);
     println!("source bundle SHA-256: {}", report.source_bundle_sha256);
