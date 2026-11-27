@@ -2,6 +2,7 @@
 
 mod common;
 mod environment;
+mod git;
 mod steam;
 mod stub;
 mod toolchain;
@@ -12,7 +13,7 @@ use vapor_sdk_core::steam::status::steam_status;
 use vapor_sdk_core::steam::types::SteamCommand;
 use vapor_sdk_core::{
     EnvironmentCommand, GlobalOptions, SdkCommand, ToolchainCommand, WorkspaceCommand,
-    environment_status, toolchain_install, toolchain_status, workspace_build,
+    environment_status, git_build, toolchain_install, toolchain_status, workspace_build,
     workspace_build_release, workspace_check, workspace_deploy, workspace_fmt,
     workspace_resolve_lockfile, workspace_status, workspace_sync, workspace_test,
 };
@@ -66,6 +67,9 @@ pub(crate) fn print_command(
         }
         SdkCommand::Toolchain(ToolchainCommand::Install) => {
             toolchain::print_install(&globals, &spec, toolchain_install()?)
+        }
+        SdkCommand::Git(vapor_sdk_core::GitCommand::Build) => {
+            git::print_build(&globals, &spec, git_build()?)
         }
         _ => stub::print(&globals, &spec),
     }

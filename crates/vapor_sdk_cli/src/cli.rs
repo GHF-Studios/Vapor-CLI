@@ -2,6 +2,7 @@
 
 mod args;
 mod leaf;
+mod git;
 mod pack;
 mod packagepack;
 mod repair;
@@ -11,6 +12,7 @@ mod toolchain;
 
 use clap::{Parser, Subcommand};
 use leaf::LeafCommand;
+use git::GitCommand;
 use pack::PackCommand;
 use packagepack::PackagepackCommand;
 use repair::RepairCommand;
@@ -113,6 +115,11 @@ enum Command {
         #[command(subcommand)]
         command: ToolchainCommand,
     },
+    /// Build pinned source Git into Vapor's disposable Linux native-build cache.
+    Git {
+        #[command(subcommand)]
+        command: GitCommand,
+    },
     /// Inspect SDK templates and creation recipes.
     Template {
         #[command(subcommand)]
@@ -184,6 +191,7 @@ impl Command {
             Self::Workspace { command } => core::SdkCommand::Workspace(command.into_core()),
             Self::Repair { command } => core::SdkCommand::Repair(command.into_core()),
             Self::Toolchain { command } => core::SdkCommand::Toolchain(command.into_core()),
+            Self::Git { command } => core::SdkCommand::Git(command.into_core()),
             Self::Template { command } => core::SdkCommand::Template(command.into_core()),
             Self::Packagepack { command } => core::SdkCommand::Packagepack(command.into_core()),
             Self::Enginepack { command } => pack_command(core::ContentType::Enginepack, command),

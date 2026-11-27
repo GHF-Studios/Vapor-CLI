@@ -200,7 +200,7 @@ pub enum ShellCommand {
 
 impl ShellCommand {
     /// Whether this command needs the remembered source selection restored
-    /// before it runs. Installation and provider maintenance commands are
+    /// before it runs. Installation, provider maintenance, and SDK commands are
     /// deliberately usable without a running Vapor Client service.
     pub fn requires_saved_source_context(&self) -> bool {
         !matches!(
@@ -209,6 +209,7 @@ impl ShellCommand {
                 | Self::Binaries
                 | Self::Libraries
                 | Self::Provider { .. }
+                | Self::Sdk { .. }
                 | Self::Diagnostics { .. }
         )
     }
