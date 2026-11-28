@@ -375,7 +375,7 @@ fn send_client_action_inner(
     String,
 > {
     const RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
-    const OPERATION_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+    const OPERATION_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
     const ACTION_RESULT_TIMEOUT: Duration = Duration::from_secs(5);
 
     let expects_authoring_result =
@@ -425,7 +425,7 @@ fn send_client_action_inner(
         .operation_id
         .clone()
         .ok_or_else(|| "service accepted an operation without returning its identity".to_owned())?;
-    let deadline = Instant::now() + OPERATION_TIMEOUT;
+    let mut deadline = Instant::now() + OPERATION_IDLE_TIMEOUT;
     let mut completed_event = None;
     let mut authoring_result = None;
     let mut action_result_deadline: Option<Instant> = None;
@@ -454,6 +454,7 @@ fn send_client_action_inner(
             ProtocolFrame::Event(ClientEvent::OperationChanged(event))
                 if event.id == operation_id =>
             {
+                deadline = Instant::now() + OPERATION_IDLE_TIMEOUT;
                 let state = (event.phase, event.status.clone());
                 if last_logged_state.as_ref() != Some(&state) {
                     let status = match &event.status {
@@ -515,6 +516,7 @@ fn send_client_action_inner(
             ProtocolFrame::Event(ClientEvent::OperationOutput(output))
                 if output.id == operation_id =>
             {
+                deadline = Instant::now() + OPERATION_IDLE_TIMEOUT;
                 finish_cli_progress(last_rendered_progress.is_some());
                 last_rendered_progress = None;
                 crate::console::print_operation_output(&output).map_err(|error| {
